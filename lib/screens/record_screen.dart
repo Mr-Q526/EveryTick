@@ -13,7 +13,8 @@ class RecordScreen extends StatefulWidget {
 }
 
 class _RecordScreenState extends State<RecordScreen> {
-  final Map<String, String> _formValues = {};
+  // Use dynamic map to store String, bool, List<String> etc.
+  final Map<String, dynamic> _formValues = {};
 
   EventTemplate? _event;
 
@@ -30,10 +31,16 @@ class _RecordScreenState extends State<RecordScreen> {
     final parsed = <String, dynamic>{};
     for (final field in event.customFields) {
       final val = _formValues[field.id];
-      if (val == null || val.trim().isEmpty) {
+      if (field.type == FieldType.toggle) {
+        parsed[field.id] = val == true;
+      } else if (field.type == FieldType.multiSelect) {
+        parsed[field.id] = val is List ? val : <String>[];
+      } else if (field.type == FieldType.singleSelect) {
+        parsed[field.id] = val is String && val.isNotEmpty ? val : null;
+      } else if (val == null || (val is String && val.trim().isEmpty)) {
         parsed[field.id] = null;
       } else if ([FieldType.number, FieldType.duration, FieldType.cost].contains(field.type)) {
-        parsed[field.id] = num.tryParse(val) ?? 0;
+        parsed[field.id] = num.tryParse(val as String) ?? 0;
       } else {
         parsed[field.id] = val;
       }
@@ -116,11 +123,7 @@ class _RecordScreenState extends State<RecordScreen> {
                   if (event.customFields.isEmpty)
                     _EmptyFieldHint(color: color)
                   else
-                    ...event.customFields.map((field) => _FieldInput(
-                          field: field,
-                          value: _formValues[field.id] ?? '',
-                          onChanged: (v) => setState(() => _formValues[field.id] = v),
-                        )),
+                    ...event.customFields.map((field) => _buildFieldInput(field, color)),
 
                   // Save button
                   const SizedBox(height: 16),
@@ -134,12 +137,12 @@ class _RecordScreenState extends State<RecordScreen> {
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         boxShadow: AppShadows.colored(color),
                       ),
-                      child: Row(
+                      child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.check, color: Colors.white, size: 22),
-                          const SizedBox(width: 10),
-                          const Text('保存打卡 (+1)',
+                          Icon(Icons.check, color: Colors.white, size: 22),
+                          SizedBox(width: 10),
+                          Text('保存打卡 (+1)',
                               style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                         ],
                       ),
@@ -178,6 +181,35 @@ class _RecordScreenState extends State<RecordScreen> {
       ),
     );
   }
+
+  Widget _buildFieldInput(FieldDefinition field, Color eventColor) {
+    switch (field.type) {
+      case FieldType.toggle:
+        return _ToggleInput(
+          field: field,
+          value: _formValues[field.id] == true,
+          onChanged: (v) => setState(() => _formValues[field.id] = v),
+        );
+      case FieldType.singleSelect:
+        return _SingleSelectInput(
+          field: field,
+          selected: _formValues[field.id] as String? ?? '',
+          onChanged: (v) => setState(() => _formValues[field.id] = v),
+        );
+      case FieldType.multiSelect:
+        return _MultiSelectInput(
+          field: field,
+          selected: (_formValues[field.id] as List<String>?) ?? [],
+          onChanged: (v) => setState(() => _formValues[field.id] = v),
+        );
+      default:
+        return _TextFieldInput(
+          field: field,
+          value: (_formValues[field.id] as String?) ?? '',
+          onChanged: (v) => setState(() => _formValues[field.id] = v),
+        );
+    }
+  }
 }
 
 // ── Sub widgets ──
@@ -204,11 +236,213 @@ class _EmptyFieldHint extends StatelessWidget {
   }
 }
 
-class _FieldInput extends StatelessWidget {
+/// Toggle (是否) field - Switch
+class _ToggleInput extends StatelessWidget {
+  final FieldDefinition field;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _ToggleInput({required this.field, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFFDB2777);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.cardBorder),
+        boxShadow: AppShadows.sm,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(height: 3, color: color),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Icon(Icons.toggle_on, size: 18, color: color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(field.name.isEmpty ? '是否' : field.name,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                ),
+                Switch(
+                  value: value,
+                  onChanged: onChanged,
+                  activeColor: color,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// SingleSelect field - Radio-like chips
+class _SingleSelectInput extends StatelessWidget {
+  final FieldDefinition field;
+  final String selected;
+  final ValueChanged<String> onChanged;
+  const _SingleSelectInput({required this.field, required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFF0891B2);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.cardBorder),
+        boxShadow: AppShadows.sm,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(height: 3, color: color),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.radio_button_checked, size: 14, color: color),
+                    const SizedBox(width: 8),
+                    Text(field.name.isEmpty ? '单选项' : field.name,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text('点击选择一项', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: field.options.map((opt) {
+                    final isSelected = opt == selected;
+                    return GestureDetector(
+                      onTap: () => onChanged(isSelected ? '' : opt),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color : AppColors.bg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isSelected ? color : AppColors.cardBorder, width: isSelected ? 2 : 1),
+                        ),
+                        child: Text(opt, style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700,
+                          color: isSelected ? Colors.white : AppColors.textSecondary,
+                        )),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// MultiSelect field - Checkbox-like chips
+class _MultiSelectInput extends StatelessWidget {
+  final FieldDefinition field;
+  final List<String> selected;
+  final ValueChanged<List<String>> onChanged;
+  const _MultiSelectInput({required this.field, required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFF7C3AED);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.cardBorder),
+        boxShadow: AppShadows.sm,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(height: 3, color: color),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.checklist, size: 14, color: color),
+                    const SizedBox(width: 8),
+                    Text(field.name.isEmpty ? '多选项' : field.name,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('已选 ${selected.length} 项', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: field.options.map((opt) {
+                    final isSelected = selected.contains(opt);
+                    return GestureDetector(
+                      onTap: () {
+                        final updated = [...selected];
+                        if (isSelected) {
+                          updated.remove(opt);
+                        } else {
+                          updated.add(opt);
+                        }
+                        onChanged(updated);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color : AppColors.bg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isSelected ? color : AppColors.cardBorder, width: isSelected ? 2 : 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isSelected) ...[
+                              const Icon(Icons.check, size: 14, color: Colors.white),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(opt, style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : AppColors.textSecondary,
+                            )),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Text/Number/Duration/Cost/Category/Notes field input
+class _TextFieldInput extends StatelessWidget {
   final FieldDefinition field;
   final String value;
   final ValueChanged<String> onChanged;
-  const _FieldInput({required this.field, required this.value, required this.onChanged});
+  const _TextFieldInput({required this.field, required this.value, required this.onChanged});
 
   IconData get _icon {
     switch (field.type) {
@@ -218,6 +452,7 @@ class _FieldInput extends StatelessWidget {
       case FieldType.category: return Icons.place;
       case FieldType.cost: return Icons.attach_money;
       case FieldType.notes: return Icons.notes;
+      default: return Icons.short_text;
     }
   }
 
@@ -229,6 +464,7 @@ class _FieldInput extends StatelessWidget {
       case FieldType.category: return AppColors.success;
       case FieldType.cost: return AppColors.primary;
       case FieldType.notes: return const Color(0xFFF59E0B);
+      default: return AppColors.textMuted;
     }
   }
 
@@ -240,6 +476,7 @@ class _FieldInput extends StatelessWidget {
       case FieldType.category: return '分类/地点 — (会自动生成排行)';
       case FieldType.cost: return '金额记录 — 请输入开支';
       case FieldType.notes: return '长篇笔记 — (纯文本记录流)';
+      default: return '请输入...';
     }
   }
 

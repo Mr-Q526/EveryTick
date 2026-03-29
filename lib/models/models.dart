@@ -1,5 +1,4 @@
 /// EveryTick (万物打卡) Data Models
-/// 1:1 migration from types/index.ts
 
 enum FieldType {
   number,
@@ -7,7 +6,10 @@ enum FieldType {
   duration,
   category,
   cost,
-  notes;
+  notes,
+  singleSelect,
+  multiSelect,
+  toggle;
 
   static FieldType fromString(String s) =>
       FieldType.values.firstWhere((e) => e.name == s, orElse: () => FieldType.text);
@@ -18,12 +20,14 @@ class FieldDefinition {
   final FieldType type;
   final String name;
   final String unit;
+  final List<String> options; // for singleSelect / multiSelect
 
   FieldDefinition({
     required this.id,
     required this.type,
     required this.name,
     this.unit = '',
+    this.options = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +35,7 @@ class FieldDefinition {
         'type': type.name,
         'name': name,
         'unit': unit,
+        if (options.isNotEmpty) 'options': options,
       };
 
   factory FieldDefinition.fromJson(Map<String, dynamic> json) => FieldDefinition(
@@ -38,14 +43,25 @@ class FieldDefinition {
         type: FieldType.fromString(json['type'] as String),
         name: json['name'] as String,
         unit: json['unit'] as String? ?? '',
+        options: (json['options'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [],
       );
 
-  FieldDefinition copyWith({String? id, FieldType? type, String? name, String? unit}) =>
+  FieldDefinition copyWith({
+    String? id,
+    FieldType? type,
+    String? name,
+    String? unit,
+    List<String>? options,
+  }) =>
       FieldDefinition(
         id: id ?? this.id,
         type: type ?? this.type,
         name: name ?? this.name,
         unit: unit ?? this.unit,
+        options: options ?? this.options,
       );
 }
 
@@ -92,7 +108,7 @@ class EventRecord {
   final String id;
   final String eventId;
   final int timestamp;
-  final Map<String, dynamic> fieldValues; // values can be String, num, or null
+  final Map<String, dynamic> fieldValues; // values can be String, num, bool, List<String>, or null
 
   EventRecord({
     required this.id,

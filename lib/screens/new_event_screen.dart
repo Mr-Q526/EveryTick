@@ -16,22 +16,23 @@ class _NewEventScreenState extends State<NewEventScreen> {
   String _selectedColor = AppColors.eventColorHexes[0];
   List<FieldDefinition> _fields = [];
 
-  void _addField(FieldType type, String defaultUnit) {
+  void _addField(FieldType type, String defaultUnit, {List<String> options = const []}) {
     setState(() {
       _fields.add(FieldDefinition(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         type: type,
         name: '',
         unit: defaultUnit,
+        options: options,
       ));
     });
   }
 
-  void _updateField(String id, {String? name, String? unit}) {
+  void _updateField(String id, {String? name, String? unit, List<String>? options}) {
     setState(() {
       _fields = _fields.map((f) {
         if (f.id != id) return f;
-        return f.copyWith(name: name ?? f.name, unit: unit ?? f.unit);
+        return f.copyWith(name: name ?? f.name, unit: unit ?? f.unit, options: options ?? f.options);
       }).toList();
     });
   }
@@ -201,6 +202,7 @@ class _NewEventScreenState extends State<NewEventScreen> {
                         onRemove: () => _removeField(field.id),
                         onNameChanged: (v) => _updateField(field.id, name: v),
                         onUnitChanged: (v) => _updateField(field.id, unit: v),
+                        onOptionsChanged: (v) => _updateField(field.id, options: v),
                       )),
 
                   // Add field buttons
@@ -214,6 +216,12 @@ class _NewEventScreenState extends State<NewEventScreen> {
                           () => _addField(FieldType.cost, '¥')),
                       _AddFieldChip('+ 花费时长', const Color(0xFF7C3AED), const Color(0xFFF5F3FF), const Color(0xFFDDD6FE),
                           () => _addField(FieldType.duration, '分钟')),
+                      _AddFieldChip('+ 单选项', const Color(0xFF0891B2), const Color(0xFFECFEFF), const Color(0xFFA5F3FC),
+                          () => _addField(FieldType.singleSelect, '', options: ['选项1', '选项2'])),
+                      _AddFieldChip('+ 多选项', const Color(0xFF7C3AED), const Color(0xFFF5F3FF), const Color(0xFFDDD6FE),
+                          () => _addField(FieldType.multiSelect, '', options: ['标签1', '标签2'])),
+                      _AddFieldChip('+ 是否', const Color(0xFFDB2777), const Color(0xFFFDF2F8), const Color(0xFFFBCFE8),
+                          () => _addField(FieldType.toggle, '')),
                       _AddFieldChip('+ 长篇笔记', const Color(0xFFD97706), const Color(0xFFFEF3C7), const Color(0xFFFDE68A),
                           () => _addField(FieldType.notes, '')),
                       _AddFieldChip('+ 普通数值', AppColors.textSecondary, AppColors.bg, AppColors.cardBorder,
@@ -335,48 +343,86 @@ class _CardSection extends StatelessWidget {
   }
 }
 
-class _FieldCard extends StatelessWidget {
+class _FieldCard extends StatefulWidget {
   final FieldDefinition field;
   final VoidCallback onRemove;
   final ValueChanged<String> onNameChanged;
   final ValueChanged<String> onUnitChanged;
-  const _FieldCard({required this.field, required this.onRemove, required this.onNameChanged, required this.onUnitChanged});
+  final ValueChanged<List<String>> onOptionsChanged;
+  const _FieldCard({required this.field, required this.onRemove, required this.onNameChanged, required this.onUnitChanged, required this.onOptionsChanged});
+  @override
+  State<_FieldCard> createState() => _FieldCardState();
+}
+
+class _FieldCardState extends State<_FieldCard> {
+  final _optionController = TextEditingController();
 
   String get _typeLabel {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.category: return '分类/地点';
       case FieldType.cost: return '金额';
       case FieldType.duration: return '时长';
       case FieldType.notes: return '多行笔记';
       case FieldType.number: return '数字';
       case FieldType.text: return '文本';
+      case FieldType.singleSelect: return '单选项';
+      case FieldType.multiSelect: return '多选项';
+      case FieldType.toggle: return '是否';
     }
   }
 
   IconData get _typeIcon {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.category: return Icons.place;
       case FieldType.cost: return Icons.attach_money;
       case FieldType.duration: return Icons.schedule;
       case FieldType.notes: return Icons.notes;
       case FieldType.number: return Icons.tag;
       case FieldType.text: return Icons.short_text;
+      case FieldType.singleSelect: return Icons.radio_button_checked;
+      case FieldType.multiSelect: return Icons.checklist;
+      case FieldType.toggle: return Icons.toggle_on;
     }
   }
 
   Color get _typeColor {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.category: return AppColors.success;
       case FieldType.cost: return AppColors.primary;
       case FieldType.duration: return const Color(0xFF8B5CF6);
       case FieldType.notes: return const Color(0xFFF59E0B);
       case FieldType.number: return AppColors.textSecondary;
       case FieldType.text: return AppColors.textMuted;
+      case FieldType.singleSelect: return const Color(0xFF0891B2);
+      case FieldType.multiSelect: return const Color(0xFF7C3AED);
+      case FieldType.toggle: return const Color(0xFFDB2777);
     }
   }
 
   bool get _showUnitField =>
-      ![FieldType.duration, FieldType.notes, FieldType.category, FieldType.text].contains(field.type);
+      [FieldType.number, FieldType.cost].contains(widget.field.type);
+
+  bool get _showOptionsEditor =>
+      [FieldType.singleSelect, FieldType.multiSelect].contains(widget.field.type);
+
+  void _addOption() {
+    final text = _optionController.text.trim();
+    if (text.isEmpty) return;
+    final updated = [...widget.field.options, text];
+    widget.onOptionsChanged(updated);
+    _optionController.clear();
+  }
+
+  void _removeOption(int index) {
+    final updated = [...widget.field.options]..removeAt(index);
+    widget.onOptionsChanged(updated);
+  }
+
+  @override
+  void dispose() {
+    _optionController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -390,6 +436,7 @@ class _FieldCard extends StatelessWidget {
         boxShadow: AppShadows.sm,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -403,12 +450,12 @@ class _FieldCard extends StatelessWidget {
                     Icon(_typeIcon, size: 13, color: _typeColor),
                     const SizedBox(width: 5),
                     Text(_typeLabel,
-                        style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.textSecondary, fontSize: 11, letterSpacing: 0.5)),
+                        style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textSecondary, fontSize: 11, letterSpacing: 0.5)),
                   ],
                 ),
               ),
               GestureDetector(
-                onTap: onRemove,
+                onTap: widget.onRemove,
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(9999)),
@@ -419,9 +466,9 @@ class _FieldCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           TextField(
-            onChanged: onNameChanged,
+            onChanged: widget.onNameChanged,
             decoration: InputDecoration(
-              hintText: '字段名称',
+              hintText: widget.field.type == FieldType.toggle ? '例如：是否破纪录' : '字段名称',
               hintStyle: const TextStyle(color: AppColors.textMuted),
               filled: true, fillColor: AppColors.bg,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide.none),
@@ -432,7 +479,7 @@ class _FieldCard extends StatelessWidget {
           if (_showUnitField) ...[
             const SizedBox(height: 10),
             TextField(
-              onChanged: onUnitChanged,
+              onChanged: widget.onUnitChanged,
               decoration: InputDecoration(
                 hintText: '单位（例如：元、公斤）',
                 hintStyle: const TextStyle(color: AppColors.textMuted),
@@ -441,6 +488,64 @@ class _FieldCard extends StatelessWidget {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+            ),
+          ],
+          // Options editor for singleSelect / multiSelect
+          if (_showOptionsEditor) ...[
+            const SizedBox(height: 14),
+            const Text('候选项', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textMuted, letterSpacing: 1)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8, runSpacing: 8,
+              children: widget.field.options.asMap().entries.map((e) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _typeColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _typeColor.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(e.value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _typeColor)),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => _removeOption(e.key),
+                        child: Icon(Icons.close, size: 14, color: _typeColor.withOpacity(0.5)),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _optionController,
+                    onSubmitted: (_) => _addOption(),
+                    decoration: InputDecoration(
+                      hintText: '输入选项名，回车添加',
+                      hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      filled: true, fillColor: AppColors.bg,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _addOption,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: _typeColor, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                    child: const Icon(Icons.add, color: Colors.white, size: 20),
+                  ),
+                ),
+              ],
             ),
           ],
         ],

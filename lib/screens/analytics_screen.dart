@@ -136,7 +136,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           }
         }
         aggs[f.id] = _FieldAgg(numSum: sum, numAvg: count>0?sum/count:0, numMax: count>0?maxVal:0, numMin: count>0?minVal:0, count: count, topFreqs: []);
-      } else if (f.type == FieldType.category || f.type == FieldType.text) {
+      } else if (f.type == FieldType.category || f.type == FieldType.text || f.type == FieldType.singleSelect) {
         final cMap = <String, int>{};
         int count = 0;
         for (var r in filteredRecords) {
@@ -148,12 +148,45 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         }
         final freqs = cMap.entries.map((e) => _Freq(e.key, e.value)).toList()..sort((a,b) => b.count.compareTo(a.count));
         aggs[f.id] = _FieldAgg(count: count, topFreqs: freqs.take(5).toList());
+      } else if (f.type == FieldType.multiSelect) {
+        final cMap = <String, int>{};
+        int count = 0;
+        for (var r in filteredRecords) {
+          final v = r.fieldValues[f.id];
+          if (v is List) {
+            for (var item in v) {
+              if (item is String && item.trim().isNotEmpty) {
+                cMap[item] = (cMap[item] ?? 0) + 1;
+                count++;
+              }
+            }
+          }
+        }
+        final freqs = cMap.entries.map((e) => _Freq(e.key, e.value)).toList()..sort((a,b) => b.count.compareTo(a.count));
+        aggs[f.id] = _FieldAgg(count: count, topFreqs: freqs.take(8).toList());
+      } else if (f.type == FieldType.toggle) {
+        int trueCount = 0;
+        int falseCount = 0;
+        for (var r in filteredRecords) {
+          final v = r.fieldValues[f.id];
+          if (v == true) trueCount++;
+          else falseCount++;
+        }
+        aggs[f.id] = _FieldAgg(
+          count: trueCount + falseCount,
+          topFreqs: [
+            _Freq('是', trueCount),
+            _Freq('否', falseCount),
+          ],
+          numSum: trueCount.toDouble(),
+          numAvg: (trueCount + falseCount) > 0 ? trueCount / (trueCount + falseCount) : 0,
+        );
       }
     }
 
     // 6. Cross Analysis Pivot Table
     _CrossPivot? pivot;
-    final catF = event.customFields.where((e) => e.type == FieldType.category || e.type == FieldType.text).firstOrNull;
+    final catF = event.customFields.where((e) => e.type == FieldType.category || e.type == FieldType.text || e.type == FieldType.singleSelect).firstOrNull;
     final numF = event.customFields.where((e) => [FieldType.number, FieldType.duration, FieldType.cost].contains(e.type)).firstOrNull;
     if (catF != null && numF != null && filteredRecords.isNotEmpty) {
       final groups = <String, List<num>>{};
@@ -315,7 +348,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               child: Icon(
                                 f.type == FieldType.category ? Icons.place : 
                                 f.type == FieldType.cost ? Icons.attach_money : 
-                                f.type == FieldType.duration ? Icons.schedule : Icons.tag,
+                                f.type == FieldType.duration ? Icons.schedule :
+                                f.type == FieldType.singleSelect ? Icons.radio_button_checked :
+                                f.type == FieldType.multiSelect ? Icons.checklist :
+                                f.type == FieldType.toggle ? Icons.toggle_on : Icons.tag,
                                 color: color, size: 14,
                               ),
                             ),
@@ -324,7 +360,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        if (f.type == FieldType.category || f.type == FieldType.text)
+                        if (f.type == FieldType.category || f.type == FieldType.text || f.type == FieldType.singleSelect || f.type == FieldType.multiSelect)
                           ...agg.topFreqs.asMap().entries.map((e) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Row(
@@ -353,6 +389,43 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               ],
                             ),
                           )).toList()
+                        else if (f.type == FieldType.toggle) ...[
+                          // Toggle ratio display
+                          Builder(builder: (_) {
+                            final trueCount = agg.topFreqs.isNotEmpty ? agg.topFreqs[0].count : 0;
+                            final falseCount = agg.topFreqs.length > 1 ? agg.topFreqs[1].count : 0;
+                            final total = trueCount + falseCount;
+                            final pct = total > 0 ? (trueCount / total * 100).round() : 0;
+                            return Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Text('$pct%', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: color)),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('是: $trueCount 次', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                        const SizedBox(height: 2),
+                                        Text('否: $falseCount 次', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  height: 8, width: double.infinity,
+                                  decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(4)),
+                                  child: FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: total > 0 ? trueCount / total : 0,
+                                    child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4))),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }),
+                        ]
                         else ...[
                           Row(
                             children: [
@@ -440,12 +513,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   final timeStr = DateFormat('MM-dd HH:mm').format(d);
                   
                   final summaries = <String>[];
-                  event.customFields.forEach((f) {
+                  for (var f in event.customFields) {
                     final v = r.fieldValues[f.id];
-                    if (v != null && v.toString().isNotEmpty && f.type != FieldType.notes) {
-                      summaries.add(f.type == FieldType.category ? v.toString() : _fmt(v as num, f.type, f.unit));
+                    if (v == null || f.type == FieldType.notes) continue;
+                    if (f.type == FieldType.toggle) {
+                      summaries.add(v == true ? '✅ ${f.name}' : '❌ ${f.name}');
+                    } else if (f.type == FieldType.multiSelect && v is List) {
+                      if (v.isNotEmpty) summaries.add(v.join(', '));
+                    } else if (f.type == FieldType.singleSelect || f.type == FieldType.category) {
+                      if (v is String && v.isNotEmpty) summaries.add(v);
+                    } else if (v is num) {
+                      summaries.add(_fmt(v, f.type, f.unit));
+                    } else if (v is String && v.isNotEmpty) {
+                      summaries.add(v);
                     }
-                  });
+                  }
                   final noteField = event.customFields.where((f) => f.type == FieldType.notes).firstOrNull;
                   final noteStr = noteField != null ? (r.fieldValues[noteField.id] as String? ?? '') : '';
 
