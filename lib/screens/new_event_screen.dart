@@ -42,11 +42,27 @@ class _NewEventScreenState extends State<NewEventScreen> {
   }
 
   void _applyPreset(PresetTemplate preset) {
+    // Strip emoji prefix from preset name for cleaner display
+    final cleanName = preset.name.replaceAll(RegExp(r'^[\p{Emoji}\s]+', unicode: true), '').trim();
     setState(() {
-      _name = preset.name == '🍲 美食' ? '' : preset.name;
+      _name = cleanName;
       _selectedColor = preset.color;
       _fields = preset.toFieldDefinitions();
     });
+  }
+
+  void _showPresetSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PresetSheet(
+        onSelect: (preset) {
+          Navigator.pop(context);
+          _applyPreset(preset);
+        },
+      ),
+    );
   }
 
   Future<void> _handleSave() async {
@@ -112,15 +128,45 @@ class _NewEventScreenState extends State<NewEventScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Presets
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(4, 0, 4, 10),
-                    child: Text('快速创建',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-                  ),
-                  Wrap(
-                    spacing: 10, runSpacing: 10,
-                    children: kPresets.map((p) => _PresetCard(preset: p, onTap: () => _applyPreset(p))).toList(),
+                  // Presets button
+                  GestureDetector(
+                    onTap: () => _showPresetSheet(context),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        border: Border.all(color: AppColors.cardBorder),
+                        boxShadow: AppShadows.sm,
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.dashboard_customize, color: AppColors.primary, size: 22),
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('从模板创建',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                                SizedBox(height: 3),
+                                Text('18 个预设打卡项目，覆盖运动 · 生活 · 学习 · 财务 · 习惯',
+                                    style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, color: AppColors.textLight, size: 22),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -260,58 +306,132 @@ class _NewEventScreenState extends State<NewEventScreen> {
 
 // ── Sub widgets ──
 
-class _PresetCard extends StatelessWidget {
-  final PresetTemplate preset;
-  final VoidCallback onTap;
-  const _PresetCard({required this.preset, required this.onTap});
+/// Bottom sheet with categorized preset templates
+class _PresetSheet extends StatelessWidget {
+  final ValueChanged<PresetTemplate> onSelect;
+  const _PresetSheet({required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    final color = hexToColor(preset.color);
-    final parts = preset.name.split(' ');
-    final emoji = parts[0];
-    final label = parts.sublist(1).join(' ');
-    final w = (MediaQuery.of(context).size.width - 32 - 10) / 2;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: w,
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.cardBorder),
-          boxShadow: AppShadows.sm,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      maxChildSize: 0.92,
+      minChildSize: 0.4,
+      builder: (_, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
-            Container(height: 3, color: color),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Text(emoji, style: const TextStyle(fontSize: 20)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                        const SizedBox(height: 2),
-                        Text('${preset.fields.length} 个字段',
-                            style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-                ],
+            // Handle bar
+            const SizedBox(height: 12),
+            Container(width: 40, height: 4,
+                decoration: BoxDecoration(color: AppColors.cardBorder, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 16),
+            const Text('选择打卡模板',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+            const SizedBox(height: 4),
+            Text('${kPresetCategories.length} 个分类 · ${kPresets.length} 个模板',
+                style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+                itemCount: kPresetCategories.length,
+                itemBuilder: (_, i) {
+                  final cat = kPresetCategories[i];
+                  return _PresetCategorySection(
+                    category: cat,
+                    onSelect: onSelect,
+                  );
+                },
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PresetCategorySection extends StatelessWidget {
+  final PresetCategory category;
+  final ValueChanged<PresetTemplate> onSelect;
+  const _PresetCategorySection({required this.category, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+          child: Row(
+            children: [
+              Text(category.icon, style: const TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              Text(category.name,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+              const SizedBox(width: 8),
+              Text('${category.presets.length}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+        Wrap(
+          spacing: 10, runSpacing: 10,
+          children: category.presets.map((p) {
+            final color = hexToColor(p.color);
+            final parts = p.name.split(' ');
+            final emoji = parts[0];
+            final label = parts.sublist(1).join(' ');
+            final w = (MediaQuery.of(context).size.width - 32 - 10) / 2;
+            return GestureDetector(
+              onTap: () => onSelect(p),
+              child: Container(
+                width: w,
+                decoration: BoxDecoration(
+                  color: AppColors.card,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.cardBorder),
+                  boxShadow: AppShadows.sm,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    Container(height: 3, color: color),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Text(emoji, style: const TextStyle(fontSize: 20)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                                const SizedBox(height: 2),
+                                Text('${p.fields.length} 个字段',
+                                    style: const TextStyle(fontSize: 10, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 20),
+      ],
     );
   }
 }
@@ -358,6 +478,15 @@ class _FieldCard extends StatefulWidget {
 
 class _FieldCardState extends State<_FieldCard> {
   final _optionController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _unitController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.field.name);
+    _unitController = TextEditingController(text: widget.field.unit);
+  }
 
   String get _typeLabel {
     switch (widget.field.type) {
@@ -426,6 +555,8 @@ class _FieldCardState extends State<_FieldCard> {
   @override
   void dispose() {
     _optionController.dispose();
+    _nameController.dispose();
+    _unitController.dispose();
     super.dispose();
   }
 
@@ -471,6 +602,7 @@ class _FieldCardState extends State<_FieldCard> {
           ),
           const SizedBox(height: 14),
           TextField(
+            controller: _nameController,
             onChanged: widget.onNameChanged,
             decoration: InputDecoration(
               hintText: widget.field.type == FieldType.toggle ? '例如：是否破纪录' : '字段名称',
@@ -484,6 +616,7 @@ class _FieldCardState extends State<_FieldCard> {
           if (_showUnitField) ...[
             const SizedBox(height: 10),
             TextField(
+              controller: _unitController,
               onChanged: widget.onUnitChanged,
               decoration: InputDecoration(
                 hintText: '单位（例如：元、公斤）',

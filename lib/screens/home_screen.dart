@@ -1,11 +1,30 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
+import '../services/update_service.dart';
 import '../theme/app_theme.dart';
 
 /// Dashboard home screen — mirrors (tabs)/index.tsx
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _checkedUpdate = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_checkedUpdate) {
+      _checkedUpdate = true;
+      // Silent auto-check after UI is ready
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) UpdateService.checkForUpdate(context, silent: true);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +64,16 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Check update button
+                GestureDetector(
+                  onTap: () => UpdateService.checkForUpdate(context, silent: false),
+                  child: Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(color: AppColors.darkSoft, borderRadius: BorderRadius.circular(10)),
+                    child: Icon(Icons.system_update_alt, color: Colors.white.withOpacity(0.5), size: 16),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 // Stats badges
                 if (data.events.isNotEmpty) ...[
                   _StatBadge('${data.events.length}', '项目', const Color(0xFF60A5FA)),
