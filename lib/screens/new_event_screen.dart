@@ -13,6 +13,7 @@ class NewEventScreen extends StatefulWidget {
 
 class _NewEventScreenState extends State<NewEventScreen> {
   String _name = '';
+  String _selectedIcon = '⭐';
   String _selectedColor = AppColors.eventColorHexes[0];
   List<FieldDefinition> _fields = [];
 
@@ -42,10 +43,11 @@ class _NewEventScreenState extends State<NewEventScreen> {
   }
 
   void _applyPreset(PresetTemplate preset) {
-    // Strip emoji prefix from preset name for cleaner display
-    final cleanName = preset.name.replaceAll(RegExp(r'^[\p{Emoji}\s]+', unicode: true), '').trim();
+    // Strip emoji prefix + variation selectors from preset name for cleaner display
+    final cleanName = preset.name.replaceAll(RegExp(r'^[\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier}\p{Emoji_Component}\uFE0F\u200D\s]+', unicode: true), '').trim();
     setState(() {
       _name = cleanName;
+      _selectedIcon = preset.icon;
       _selectedColor = preset.color;
       _fields = preset.toFieldDefinitions();
     });
@@ -75,7 +77,7 @@ class _NewEventScreenState extends State<NewEventScreen> {
     final data = DataScope.of(context);
     await data.addEvent(
       name: _name,
-      icon: 'star',
+      icon: _selectedIcon,
       color: _selectedColor,
       customFields: _fields,
     );
@@ -198,6 +200,57 @@ class _NewEventScreenState extends State<NewEventScreen> {
                         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                       ),
                       style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Icon picker
+                  _CardSection(
+                    label: '图标',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Current icon preview
+                        Row(
+                          children: [
+                            Container(
+                              width: 56, height: 56,
+                              decoration: BoxDecoration(
+                                color: hexToColor(_selectedColor).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(_selectedIcon, style: const TextStyle(fontSize: 28)),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Text('点击下方选择图标',
+                                  style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        // Emoji grid
+                        Wrap(
+                          spacing: 6, runSpacing: 6,
+                          children: kIconPresets.map((emoji) {
+                            final selected = emoji == _selectedIcon;
+                            return GestureDetector(
+                              onTap: () => setState(() => _selectedIcon = emoji),
+                              child: Container(
+                                width: 42, height: 42,
+                                decoration: BoxDecoration(
+                                  color: selected ? hexToColor(_selectedColor).withOpacity(0.15) : AppColors.bg,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: selected ? Border.all(color: hexToColor(_selectedColor), width: 2) : null,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(emoji, style: const TextStyle(fontSize: 20)),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

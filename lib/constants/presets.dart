@@ -3,7 +3,7 @@ import '../models/models.dart';
 /// Preset templates with category grouping for scalable menu display
 class PresetTemplate {
   final String name;
-  final String icon;
+  final String icon; // emoji character, e.g. '💪'
   final String color;
   final List<_PresetField> fields;
 
@@ -43,6 +43,24 @@ class PresetCategory {
   const PresetCategory({required this.name, required this.icon, required this.presets});
 }
 
+/// Curated emoji icons for event icon picker
+const kIconPresets = [
+  // Row 1: Sports & Fitness
+  '💪', '🏃', '🧘', '🏊', '🚴', '⚽', '🏀', '🎾', '⛷️', '🏋️',
+  // Row 2: Food & Drink
+  '🍲', '☕', '🍺', '🧋', '🍕', '🍔', '🎂', '🍣', '🥗', '🍳',
+  // Row 3: Travel & Transport
+  '✈️', '🚄', '🚗', '🚢', '🏕️', '🏨', '🗺️', '📸', '🧳', '⛰️',
+  // Row 4: Learning & Work
+  '📖', '📝', '💻', '🎓', '🔬', '🎨', '🎸', '🎹', '💡', '📊',
+  // Row 5: Daily Life & Habits
+  '🌅', '💧', '💊', '💤', '🧹', '🧘', '🧴', '🚶', '🧘', '❤️',
+  // Row 6: Entertainment & Social
+  '🎬', '🎮', '🎵', '🎤', '📺', '🎲', '🎭', '🎪', '📱', '💬',
+  // Row 7: Finance & Goals
+  '💰', '🧧', '💳', '📈', '🎯', '🏆', '⭐', '🔥', '✅', '🌟',
+];
+
 const kPresetCategories = [
   // ── 运动健康 ──
   PresetCategory(
@@ -51,7 +69,7 @@ const kPresetCategories = [
     presets: [
       PresetTemplate(
         name: '💪 健身',
-        icon: 'dumbbell',
+        icon: '💪',
         color: '#10B981',
         fields: [
           _PresetField(
@@ -64,7 +82,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🏃 跑步',
-        icon: 'run',
+        icon: '🏃',
         color: '#3B82F6',
         fields: [
           _PresetField(type: FieldType.number, name: '距离', unit: '公里'),
@@ -74,7 +92,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🧘 瑜伽',
-        icon: 'yoga',
+        icon: '🧘',
         color: '#8B5CF6',
         fields: [
           _PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
@@ -87,7 +105,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '💊 吃药',
-        icon: 'pill',
+        icon: '💊',
         color: '#EF4444',
         fields: [
           _PresetField(
@@ -99,7 +117,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '💤 睡眠',
-        icon: 'sleep',
+        icon: '💤',
         color: '#6366F1',
         fields: [
           _PresetField(type: FieldType.duration, name: '睡眠时长', unit: '小时'),
@@ -112,7 +130,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '💧 喝水',
-        icon: 'water',
+        icon: '💧',
         color: '#06B6D4',
         fields: [
           _PresetField(type: FieldType.number, name: '饮水量', unit: 'ml'),
@@ -128,7 +146,7 @@ const kPresetCategories = [
     presets: [
       PresetTemplate(
         name: '✈️ 起飞',
-        icon: 'plane',
+        icon: '✈️',
         color: '#3B82F6',
         fields: [
           _PresetField(type: FieldType.category, name: '航线'),
@@ -137,7 +155,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🍲 美食',
-        icon: 'utensils',
+        icon: '🍲',
         color: '#EF4444',
         fields: [
           _PresetField(type: FieldType.category, name: '地点/分类'),
@@ -151,7 +169,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🎬 观影',
-        icon: 'movie',
+        icon: '🎬',
         color: '#F59E0B',
         fields: [
           _PresetField(type: FieldType.text, name: '影片名称'),
@@ -165,7 +183,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '☕ 咖啡',
-        icon: 'coffee',
+        icon: '☕',
         color: '#92400E',
         fields: [
           _PresetField(type: FieldType.category, name: '品牌/店铺'),
@@ -174,7 +192,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🎮 游戏',
-        icon: 'game',
+        icon: '🎮',
         color: '#7C3AED',
         fields: [
           _PresetField(type: FieldType.text, name: '游戏名'),
@@ -191,7 +209,7 @@ const kPresetCategories = [
     presets: [
       PresetTemplate(
         name: '📖 读书',
-        icon: 'book',
+        icon: '📖',
         color: '#059669',
         fields: [
           _PresetField(type: FieldType.text, name: '书名'),
@@ -202,7 +220,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '📝 学习',
-        icon: 'study',
+        icon: '📝',
         color: '#2563EB',
         fields: [
           _PresetField(
@@ -215,7 +233,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🎸 练琴',
-        icon: 'music',
+        icon: '🎸',
         color: '#DB2777',
         fields: [
           _PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
@@ -232,7 +250,7 @@ const kPresetCategories = [
     presets: [
       PresetTemplate(
         name: '💰 日常开销',
-        icon: 'money',
+        icon: '💰',
         color: '#F59E0B',
         fields: [
           _PresetField(
@@ -245,7 +263,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '🧧 收入',
-        icon: 'income',
+        icon: '🧧',
         color: '#10B981',
         fields: [
           _PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
@@ -262,7 +280,7 @@ const kPresetCategories = [
     presets: [
       PresetTemplate(
         name: '🌅 早起',
-        icon: 'sunrise',
+        icon: '🌅',
         color: '#F97316',
         fields: [
           _PresetField(
@@ -274,7 +292,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '📵 戒手机',
-        icon: 'phone',
+        icon: '📵',
         color: '#64748B',
         fields: [
           _PresetField(type: FieldType.duration, name: '屏幕时间', unit: '小时'),
@@ -283,7 +301,7 @@ const kPresetCategories = [
       ),
       PresetTemplate(
         name: '✍️ 日记',
-        icon: 'diary',
+        icon: '✍️',
         color: '#0891B2',
         fields: [
           _PresetField(type: FieldType.notes, name: '今日记录'),

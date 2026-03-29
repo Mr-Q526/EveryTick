@@ -21,8 +21,14 @@ class DataProvider extends ChangeNotifier {
   Future<void> loadData() async {
     _loading = true;
     notifyListeners();
-    _events = await _storage.getEvents();
-    _records = await _storage.getRecords();
+    try {
+      _events = await _storage.getEvents();
+      _records = await _storage.getRecords();
+    } catch (e) {
+      // Storage may fail on first launch; fall back to empty data
+      _events = [];
+      _records = [];
+    }
     _loading = false;
     notifyListeners();
   }

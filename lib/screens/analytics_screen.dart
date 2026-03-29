@@ -255,7 +255,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(event.name, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+                  Row(
+                    children: [
+                      if (event.icon.isNotEmpty && event.icon.characters.length == 1)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Text(event.icon, style: const TextStyle(fontSize: 32)),
+                        ),
+                      Expanded(
+                        child: Text(event.name, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5)),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   _TimeSpanSelector(val: _timeSpan, onSelect: (v) => setState(() => _timeSpan = v), color: color),
                   const SizedBox(height: 24),

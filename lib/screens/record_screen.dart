@@ -114,7 +114,10 @@ class _RecordScreenState extends State<RecordScreen> {
                         borderRadius: BorderRadius.circular(22),
                       ),
                       alignment: Alignment.center,
-                      child: Text(event.name.characters.first,
+                      child: Text(
+                          event.icon.isNotEmpty && event.icon.characters.length == 1
+                              ? event.icon
+                              : event.name.characters.first,
                           style: TextStyle(color: color, fontSize: 28, fontWeight: FontWeight.w900)),
                     ),
                     GestureDetector(

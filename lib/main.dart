@@ -8,6 +8,12 @@ import 'screens/analytics_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Catch Flutter framework errors to prevent hard crashes
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+  };
+
   runApp(const EveryTickApp());
 }
 
@@ -35,7 +41,6 @@ class _EveryTickAppState extends State<EveryTickApp> {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           scaffoldBackgroundColor: AppColors.bg,
-          fontFamily: 'NotoSansSC',
           useMaterial3: true,
         ),
         initialRoute: '/',
