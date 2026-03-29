@@ -181,6 +181,31 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           numSum: trueCount.toDouble(),
           numAvg: (trueCount + falseCount) > 0 ? trueCount / (trueCount + falseCount) : 0,
         );
+      } else if (f.type == FieldType.taggedValues) {
+        // Each tag: count occurrences + sum values
+        final tagSums = <String, num>{};
+        final tagCounts = <String, int>{};
+        for (var r in filteredRecords) {
+          final v = r.fieldValues[f.id];
+          if (v is Map) {
+            for (var entry in v.entries) {
+              final tag = entry.key.toString();
+              final val = entry.value is num ? entry.value as num : 0;
+              tagSums[tag] = (tagSums[tag] ?? 0) + val;
+              tagCounts[tag] = (tagCounts[tag] ?? 0) + 1;
+            }
+          }
+        }
+        num totalSum = 0;
+        for (var s in tagSums.values) totalSum += s;
+        final freqs = tagSums.entries.map((e) => _Freq('${e.key} (${e.value.round()}${f.unit})', tagCounts[e.key] ?? 0)).toList()
+          ..sort((a, b) => b.count.compareTo(a.count));
+        aggs[f.id] = _FieldAgg(
+          count: tagCounts.values.fold(0, (a, b) => a + b),
+          topFreqs: freqs.take(10).toList(),
+          numSum: totalSum,
+          numAvg: freqs.isNotEmpty ? totalSum / filteredRecords.where((r) => r.fieldValues[f.id] is Map && (r.fieldValues[f.id] as Map).isNotEmpty).length.clamp(1, 999999) : 0,
+        );
       }
     }
 
@@ -351,7 +376,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 f.type == FieldType.duration ? Icons.schedule :
                                 f.type == FieldType.singleSelect ? Icons.radio_button_checked :
                                 f.type == FieldType.multiSelect ? Icons.checklist :
-                                f.type == FieldType.toggle ? Icons.toggle_on : Icons.tag,
+                                f.type == FieldType.toggle ? Icons.toggle_on :
+                                f.type == FieldType.taggedValues ? Icons.sell : Icons.tag,
                                 color: color, size: 14,
                               ),
                             ),
@@ -360,7 +386,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        if (f.type == FieldType.category || f.type == FieldType.text || f.type == FieldType.singleSelect || f.type == FieldType.multiSelect)
+                        if (f.type == FieldType.category || f.type == FieldType.text || f.type == FieldType.singleSelect || f.type == FieldType.multiSelect || f.type == FieldType.taggedValues)
                           ...agg.topFreqs.asMap().entries.map((e) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: Row(
@@ -520,6 +546,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       summaries.add(v == true ? '✅ ${f.name}' : '❌ ${f.name}');
                     } else if (f.type == FieldType.multiSelect && v is List) {
                       if (v.isNotEmpty) summaries.add(v.join(', '));
+                    } else if (f.type == FieldType.taggedValues && v is Map) {
+                      final parts = v.entries.map((e) => '${e.key}:${e.value}${f.unit}').toList();
+                      if (parts.isNotEmpty) summaries.add(parts.join(' · '));
                     } else if (f.type == FieldType.singleSelect || f.type == FieldType.category) {
                       if (v is String && v.isNotEmpty) summaries.add(v);
                     } else if (v is num) {

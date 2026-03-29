@@ -21,6 +21,7 @@ class PresetTemplate {
         type: e.value.type,
         name: e.value.name,
         unit: e.value.unit,
+        options: e.value.options,
       );
     }).toList();
   }
@@ -30,7 +31,8 @@ class _PresetField {
   final FieldType type;
   final String name;
   final String unit;
-  const _PresetField({required this.type, required this.name, this.unit = ''});
+  final List<String> options;
+  const _PresetField({required this.type, required this.name, this.unit = '', this.options = const []});
 }
 
 const kPresets = [
@@ -56,8 +58,12 @@ const kPresets = [
     icon: 'dumbbell',
     color: '#10B981',
     fields: [
-      _PresetField(type: FieldType.category, name: '锻炼部位'),
-      _PresetField(type: FieldType.duration, name: '训练时间', unit: '分钟'),
+      _PresetField(
+        type: FieldType.taggedValues,
+        name: '训练部位',
+        unit: '分钟',
+        options: ['胸', '背', '腿', '肩', '手臂', '核心'],
+      ),
     ],
   ),
 ];

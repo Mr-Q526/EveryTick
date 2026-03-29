@@ -222,6 +222,8 @@ class _NewEventScreenState extends State<NewEventScreen> {
                           () => _addField(FieldType.multiSelect, '', options: ['标签1', '标签2'])),
                       _AddFieldChip('+ 是否', const Color(0xFFDB2777), const Color(0xFFFDF2F8), const Color(0xFFFBCFE8),
                           () => _addField(FieldType.toggle, '')),
+                      _AddFieldChip('+ 标签数值', const Color(0xFF059669), const Color(0xFFECFDF5), const Color(0xFF6EE7B7),
+                          () => _addField(FieldType.taggedValues, '分钟', options: ['标签1', '标签2'])),
                       _AddFieldChip('+ 长篇笔记', const Color(0xFFD97706), const Color(0xFFFEF3C7), const Color(0xFFFDE68A),
                           () => _addField(FieldType.notes, '')),
                       _AddFieldChip('+ 普通数值', AppColors.textSecondary, AppColors.bg, AppColors.cardBorder,
@@ -368,6 +370,7 @@ class _FieldCardState extends State<_FieldCard> {
       case FieldType.singleSelect: return '单选项';
       case FieldType.multiSelect: return '多选项';
       case FieldType.toggle: return '是否';
+      case FieldType.taggedValues: return '标签数值';
     }
   }
 
@@ -382,6 +385,7 @@ class _FieldCardState extends State<_FieldCard> {
       case FieldType.singleSelect: return Icons.radio_button_checked;
       case FieldType.multiSelect: return Icons.checklist;
       case FieldType.toggle: return Icons.toggle_on;
+      case FieldType.taggedValues: return Icons.sell;
     }
   }
 
@@ -396,14 +400,15 @@ class _FieldCardState extends State<_FieldCard> {
       case FieldType.singleSelect: return const Color(0xFF0891B2);
       case FieldType.multiSelect: return const Color(0xFF7C3AED);
       case FieldType.toggle: return const Color(0xFFDB2777);
+      case FieldType.taggedValues: return const Color(0xFF059669);
     }
   }
 
   bool get _showUnitField =>
-      [FieldType.number, FieldType.cost].contains(widget.field.type);
+      [FieldType.number, FieldType.cost, FieldType.taggedValues].contains(widget.field.type);
 
   bool get _showOptionsEditor =>
-      [FieldType.singleSelect, FieldType.multiSelect].contains(widget.field.type);
+      [FieldType.singleSelect, FieldType.multiSelect, FieldType.taggedValues].contains(widget.field.type);
 
   void _addOption() {
     final text = _optionController.text.trim();

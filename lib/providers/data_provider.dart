@@ -45,11 +45,12 @@ class DataProvider extends ChangeNotifier {
     await loadData();
   }
 
-  Future<void> addRecord(String eventId, Map<String, dynamic> fieldValues) async {
+  Future<void> addRecord(String eventId, Map<String, dynamic> fieldValues, {int? timestamp}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     final record = EventRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: now.toString(),
       eventId: eventId,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
+      timestamp: timestamp ?? now,
       fieldValues: fieldValues,
     );
     await _storage.saveRecord(record);

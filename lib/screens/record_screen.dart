@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
 import '../theme/app_theme.dart';
@@ -13,8 +14,9 @@ class RecordScreen extends StatefulWidget {
 }
 
 class _RecordScreenState extends State<RecordScreen> {
-  // Use dynamic map to store String, bool, List<String> etc.
   final Map<String, dynamic> _formValues = {};
+  DateTime _selectedTime = DateTime.now();
+  bool _isRetroactive = false; // 补打卡模式
 
   EventTemplate? _event;
 
@@ -23,6 +25,25 @@ class _RecordScreenState extends State<RecordScreen> {
     super.didChangeDependencies();
     final data = DataScope.of(context);
     _event = data.events.firstWhere((e) => e.id == widget.eventId, orElse: () => _event!);
+  }
+
+  Future<void> _pickDateTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedTime),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      _selectedTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      _isRetroactive = true;
+    });
   }
 
   Future<void> _handleSave() async {
@@ -37,6 +58,9 @@ class _RecordScreenState extends State<RecordScreen> {
         parsed[field.id] = val is List ? val : <String>[];
       } else if (field.type == FieldType.singleSelect) {
         parsed[field.id] = val is String && val.isNotEmpty ? val : null;
+      } else if (field.type == FieldType.taggedValues) {
+        // Store as Map<String, num>
+        parsed[field.id] = val is Map ? val : <String, dynamic>{};
       } else if (val == null || (val is String && val.trim().isEmpty)) {
         parsed[field.id] = null;
       } else if ([FieldType.number, FieldType.duration, FieldType.cost].contains(field.type)) {
@@ -45,13 +69,13 @@ class _RecordScreenState extends State<RecordScreen> {
         parsed[field.id] = val;
       }
     }
-    await data.addRecord(event.id, parsed);
+    await data.addRecord(event.id, parsed, timestamp: _selectedTime.millisecondsSinceEpoch);
     if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
   }
 
   Future<void> _handleSkip() async {
     final data = DataScope.of(context);
-    await data.addRecord(_event!.id, {});
+    await data.addRecord(_event!.id, {}, timestamp: _selectedTime.millisecondsSinceEpoch);
     if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
   }
 
@@ -66,6 +90,7 @@ class _RecordScreenState extends State<RecordScreen> {
     }
 
     final color = hexToColor(event.color);
+    final timeStr = DateFormat('yyyy-MM-dd HH:mm').format(_selectedTime);
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -120,6 +145,44 @@ class _RecordScreenState extends State<RecordScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               child: Column(
                 children: [
+                  // ── 补打卡时间选择 ──
+                  GestureDetector(
+                    onTap: _pickDateTime,
+                    child: Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _isRetroactive ? color.withOpacity(0.08) : AppColors.card,
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        border: Border.all(color: _isRetroactive ? color.withOpacity(0.3) : AppColors.cardBorder),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(_isRetroactive ? Icons.history : Icons.access_time,
+                              size: 18, color: _isRetroactive ? color : AppColors.textMuted),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(_isRetroactive ? '补打卡' : '打卡时间',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
+                                        color: _isRetroactive ? color : AppColors.textMuted, letterSpacing: 0.5)),
+                                const SizedBox(height: 4),
+                                Text(timeStr,
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
+                                        color: _isRetroactive ? color : AppColors.textPrimary)),
+                              ],
+                            ),
+                          ),
+                          Text('点击修改', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
+                              color: _isRetroactive ? color : AppColors.textLight)),
+                        ],
+                      ),
+                    ),
+                  ),
+
                   if (event.customFields.isEmpty)
                     _EmptyFieldHint(color: color)
                   else
@@ -137,13 +200,13 @@ class _RecordScreenState extends State<RecordScreen> {
                         borderRadius: BorderRadius.circular(AppRadius.md),
                         boxShadow: AppShadows.colored(color),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check, color: Colors.white, size: 22),
-                          SizedBox(width: 10),
-                          Text('保存打卡 (+1)',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                          Icon(_isRetroactive ? Icons.history : Icons.check, color: Colors.white, size: 22),
+                          const SizedBox(width: 10),
+                          Text(_isRetroactive ? '补打卡 (+1)' : '保存打卡 (+1)',
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                         ],
                       ),
                     ),
@@ -200,6 +263,12 @@ class _RecordScreenState extends State<RecordScreen> {
         return _MultiSelectInput(
           field: field,
           selected: (_formValues[field.id] as List<String>?) ?? [],
+          onChanged: (v) => setState(() => _formValues[field.id] = v),
+        );
+      case FieldType.taggedValues:
+        return _TaggedValuesInput(
+          field: field,
+          values: (_formValues[field.id] as Map<String, dynamic>?) ?? {},
           onChanged: (v) => setState(() => _formValues[field.id] = v),
         );
       default:
@@ -262,7 +331,7 @@ class _ToggleInput extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             child: Row(
               children: [
-                Icon(Icons.toggle_on, size: 18, color: color),
+                const Icon(Icons.toggle_on, size: 18, color: color),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(field.name.isEmpty ? '是否' : field.name,
@@ -271,7 +340,7 @@ class _ToggleInput extends StatelessWidget {
                 Switch(
                   value: value,
                   onChanged: onChanged,
-                  activeColor: color,
+                  activeTrackColor: color,
                 ),
               ],
             ),
@@ -428,6 +497,155 @@ class _MultiSelectInput extends StatelessWidget {
                     );
                   }).toList(),
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// TaggedValues field — multi-select with per-option numeric input
+class _TaggedValuesInput extends StatelessWidget {
+  final FieldDefinition field;
+  final Map<String, dynamic> values;
+  final ValueChanged<Map<String, dynamic>> onChanged;
+  const _TaggedValuesInput({required this.field, required this.values, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFF059669);
+    final selectedTags = values.keys.toList();
+    // Calculate total
+    num total = 0;
+    for (var v in values.values) {
+      if (v is num) total += v;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.cardBorder),
+        boxShadow: AppShadows.sm,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(height: 3, color: color),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.sell, size: 14, color: color),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(field.name.isEmpty ? '标签数值' : field.name,
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                    ),
+                    if (total > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: Text('合计 $total${field.unit}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('点击标签选择，输入${field.unit.isNotEmpty ? field.unit : "数值"}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                const SizedBox(height: 14),
+
+                // Tag chips
+                Wrap(
+                  spacing: 10, runSpacing: 10,
+                  children: field.options.map((opt) {
+                    final isSelected = selectedTags.contains(opt);
+                    return GestureDetector(
+                      onTap: () {
+                        final updated = Map<String, dynamic>.from(values);
+                        if (isSelected) {
+                          updated.remove(opt);
+                        } else {
+                          updated[opt] = 0;
+                        }
+                        onChanged(updated);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isSelected ? color : AppColors.bg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isSelected ? color : AppColors.cardBorder, width: isSelected ? 2 : 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isSelected) ...[
+                              const Icon(Icons.check, size: 14, color: Colors.white),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(opt, style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : AppColors.textSecondary,
+                            )),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                // Per-tag value inputs
+                if (selectedTags.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Divider(color: AppColors.cardBorder),
+                  const SizedBox(height: 12),
+                  ...selectedTags.map((tag) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(tag, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            onChanged: (v) {
+                              final updated = Map<String, dynamic>.from(values);
+                              updated[tag] = num.tryParse(v) ?? 0;
+                              onChanged(updated);
+                            },
+                            decoration: InputDecoration(
+                              hintText: '0',
+                              hintStyle: const TextStyle(color: AppColors.textLight),
+                              suffixText: field.unit,
+                              suffixStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+                              filled: true, fillColor: AppColors.bg,
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm), borderSide: BorderSide.none),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            ),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
               ],
             ),
           ),

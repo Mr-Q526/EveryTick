@@ -9,7 +9,8 @@ enum FieldType {
   notes,
   singleSelect,
   multiSelect,
-  toggle;
+  toggle,
+  taggedValues;
 
   static FieldType fromString(String s) =>
       FieldType.values.firstWhere((e) => e.name == s, orElse: () => FieldType.text);
