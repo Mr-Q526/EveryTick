@@ -1,17 +1,101 @@
 # 万物打卡 EveryTick
 
-一款注重隐私、本地优先的事件追踪打卡应用。
+万物皆可打卡 —— 为任何事情创建专属的打卡事件，养成习惯、记录坚持。
 
-A privacy-focused, local-first event tracking and check-in app built with Flutter.
+Create check-in events for anything. Build habits, track streaks, celebrate consistency.
 
-## Getting Started
+## ✨ 核心理念
 
-```bash
-flutter run
+生活中有太多值得被记录的事：坐了一次飞机、吃了一顿火锅、去了一次健身房、读完了一本书……
+
+**万物打卡**让你为任何事情创建一个打卡项目，每次完成时轻点一下 **+1**。不需要复杂的设置，不需要联网，打开即用。
+
+> 每一次，都值得被记住。
+
+## 📱 功能亮点
+
+### 🎯 自由创建打卡项目
+
+- 为**任何事情**建立打卡事件 —— 坐飞机、吃火锅、读书、跑步……
+- 自定义**项目名称**和**主题颜色**（8 种精选配色）
+- 内置快速模板：✈️ 起飞、🍲 美食、💪 健身，一键套用
+
+### 📝 灵活的自定义字段
+
+每个打卡项目可以附加多种字段类型，记录你关心的细节：
+
+| 字段类型 | 用途 | 示例 |
+|---------|------|------|
+| 📍 分类/地点 | 记录场景或位置，自动生成排行榜 | 店名、城市、训练部位 |
+| 💰 货币金额 | 追踪花费 | 消费金额（¥） |
+| ⏱ 花费时长 | 记录时间消耗 | 训练时间（分钟） |
+| 📓 长篇笔记 | 自由文本记录 | 心得体会 |
+| 🔢 普通数值 | 通用数字 | 公里数、页数 |
+
+### 📊 强大的数据分析
+
+打卡不仅仅是 +1，还有**全维度数据洞察**：
+
+- **频率趋势** — 按日/月柱状图呈现打卡频率
+- **打卡热力图** — 类似 GitHub 贡献图，直观展示打卡密度（最近 15 周）
+- **星期分布** — 发现你在周几最活跃
+- **时段分布** — 了解凌晨、上午、下午、晚上的打卡习惯
+- **字段聚合** — 自动计算累计总计、平均每次、单次最高/最低
+- **分类排行** — 分类/地点字段自动生成 Top 5 排行
+- **多维透视分析** — 按分类字段交叉分析数值字段（如：按「餐厅」统计「花费」）
+- **时间筛选** — 支持 1 周 / 1 月 / 3 月 / 1 年 / 全部多维度查看
+
+### 🔒 隐私与本地优先
+
+- **数据完全存储在本地**，使用 SharedPreferences 持久化 JSON 数据
+- **无需注册、无需联网**，打开即用
+- 你的数据只属于你
+
+## 🏗 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 框架 | Flutter (Dart) |
+| 状态管理 | InheritedWidget (DataScope / DataProvider) |
+| 数据存储 | SharedPreferences (本地 JSON) |
+| 日期处理 | intl |
+| 目标平台 | Android / iOS / Web |
+
+## 📂 项目结构
+
+```
+lib/
+├── main.dart              # 应用入口 & 路由配置
+├── constants/
+│   └── presets.dart        # 内置快速模板（起飞、美食、健身）
+├── models/
+│   └── models.dart         # 数据模型（EventTemplate / EventRecord / FieldDefinition）
+├── providers/
+│   └── data_provider.dart  # 全局状态管理（InheritedWidget）
+├── screens/
+│   ├── home_screen.dart    # 首页仪表盘（项目卡片网格）
+│   ├── new_event_screen.dart   # 新建项目（模板 + 自定义字段）
+│   ├── record_screen.dart      # 打卡记录（填写字段值）
+│   └── analytics_screen.dart   # 数据分析（图表 + 热力图 + 透视表）
+├── services/
+│   └── storage_service.dart    # 本地持久化层
+└── theme/
+    └── app_theme.dart      # 设计令牌（颜色 / 圆角 / 阴影）
 ```
 
-## Build APK
+## 🚀 快速开始
 
 ```bash
+# 安装依赖
+flutter pub get
+
+# 运行开发版
+flutter run
+
+# 构建 APK（自动递增版本号）
 ./build.sh
 ```
+
+## 📄 License
+
+MIT
