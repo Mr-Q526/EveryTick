@@ -5,7 +5,7 @@ class PresetTemplate {
   final String name;
   final String icon; // emoji character, e.g. '💪'
   final String color;
-  final List<_PresetField> fields;
+  final List<PresetField> fields;
 
   const PresetTemplate({
     required this.name,
@@ -27,12 +27,17 @@ class PresetTemplate {
   }
 }
 
-class _PresetField {
+class PresetField {
   final FieldType type;
   final String name;
   final String unit;
   final List<String> options;
-  const _PresetField({required this.type, required this.name, this.unit = '', this.options = const []});
+  const PresetField({
+    required this.type,
+    required this.name,
+    this.unit = '',
+    this.options = const [],
+  });
 }
 
 /// Category grouping for preset menu
@@ -40,7 +45,11 @@ class PresetCategory {
   final String name;
   final String icon;
   final List<PresetTemplate> presets;
-  const PresetCategory({required this.name, required this.icon, required this.presets});
+  const PresetCategory({
+    required this.name,
+    required this.icon,
+    required this.presets,
+  });
 }
 
 /// Curated emoji icons for event icon picker
@@ -72,7 +81,7 @@ const kPresetCategories = [
         icon: '💪',
         color: '#10B981',
         fields: [
-          _PresetField(
+          PresetField(
             type: FieldType.taggedValues,
             name: '训练部位',
             unit: '分钟',
@@ -85,9 +94,9 @@ const kPresetCategories = [
         icon: '🏃',
         color: '#3B82F6',
         fields: [
-          _PresetField(type: FieldType.number, name: '距离', unit: '公里'),
-          _PresetField(type: FieldType.duration, name: '用时', unit: '分钟'),
-          _PresetField(type: FieldType.toggle, name: '是否破纪录'),
+          PresetField(type: FieldType.number, name: '距离', unit: '公里'),
+          PresetField(type: FieldType.duration, name: '用时', unit: '分钟'),
+          PresetField(type: FieldType.toggle, name: '是否破纪录'),
         ],
       ),
       PresetTemplate(
@@ -95,8 +104,8 @@ const kPresetCategories = [
         icon: '🧘',
         color: '#8B5CF6',
         fields: [
-          _PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
-          _PresetField(
+          PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
+          PresetField(
             type: FieldType.singleSelect,
             name: '练习类型',
             options: ['哈他', '流瑜伽', '阴瑜伽', '热瑜伽', '冥想'],
@@ -108,7 +117,7 @@ const kPresetCategories = [
         icon: '💊',
         color: '#EF4444',
         fields: [
-          _PresetField(
+          PresetField(
             type: FieldType.multiSelect,
             name: '药物',
             options: ['维生素', '钙片', '鱼油', '益生菌'],
@@ -120,8 +129,8 @@ const kPresetCategories = [
         icon: '💤',
         color: '#6366F1',
         fields: [
-          _PresetField(type: FieldType.duration, name: '睡眠时长', unit: '小时'),
-          _PresetField(
+          PresetField(type: FieldType.duration, name: '睡眠时长', unit: '小时'),
+          PresetField(
             type: FieldType.singleSelect,
             name: '睡眠质量',
             options: ['很好', '一般', '较差', '失眠'],
@@ -132,9 +141,7 @@ const kPresetCategories = [
         name: '💧 喝水',
         icon: '💧',
         color: '#06B6D4',
-        fields: [
-          _PresetField(type: FieldType.number, name: '饮水量', unit: 'ml'),
-        ],
+        fields: [PresetField(type: FieldType.number, name: '饮水量', unit: 'ml')],
       ),
     ],
   ),
@@ -149,8 +156,8 @@ const kPresetCategories = [
         icon: '✈️',
         color: '#3B82F6',
         fields: [
-          _PresetField(type: FieldType.category, name: '航线'),
-          _PresetField(type: FieldType.duration, name: '飞行时长', unit: '小时'),
+          PresetField(type: FieldType.category, name: '航线'),
+          PresetField(type: FieldType.duration, name: '飞行时长', unit: '小时'),
         ],
       ),
       PresetTemplate(
@@ -158,9 +165,9 @@ const kPresetCategories = [
         icon: '🍲',
         color: '#EF4444',
         fields: [
-          _PresetField(type: FieldType.category, name: '地点/分类'),
-          _PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
-          _PresetField(
+          PresetField(type: FieldType.category, name: '地点/分类'),
+          PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
+          PresetField(
             type: FieldType.singleSelect,
             name: '评分',
             options: ['⭐', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '⭐⭐⭐⭐⭐'],
@@ -172,13 +179,13 @@ const kPresetCategories = [
         icon: '🎬',
         color: '#F59E0B',
         fields: [
-          _PresetField(type: FieldType.text, name: '影片名称'),
-          _PresetField(
+          PresetField(type: FieldType.text, name: '影片名称'),
+          PresetField(
             type: FieldType.singleSelect,
             name: '评分',
             options: ['⭐', '⭐⭐', '⭐⭐⭐', '⭐⭐⭐⭐', '⭐⭐⭐⭐⭐'],
           ),
-          _PresetField(type: FieldType.notes, name: '短评'),
+          PresetField(type: FieldType.notes, name: '短评'),
         ],
       ),
       PresetTemplate(
@@ -186,8 +193,8 @@ const kPresetCategories = [
         icon: '☕',
         color: '#92400E',
         fields: [
-          _PresetField(type: FieldType.category, name: '品牌/店铺'),
-          _PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
+          PresetField(type: FieldType.category, name: '品牌/店铺'),
+          PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
         ],
       ),
       PresetTemplate(
@@ -195,8 +202,8 @@ const kPresetCategories = [
         icon: '🎮',
         color: '#7C3AED',
         fields: [
-          _PresetField(type: FieldType.text, name: '游戏名'),
-          _PresetField(type: FieldType.duration, name: '游玩时长', unit: '小时'),
+          PresetField(type: FieldType.text, name: '游戏名'),
+          PresetField(type: FieldType.duration, name: '游玩时长', unit: '小时'),
         ],
       ),
     ],
@@ -212,10 +219,10 @@ const kPresetCategories = [
         icon: '📖',
         color: '#059669',
         fields: [
-          _PresetField(type: FieldType.text, name: '书名'),
-          _PresetField(type: FieldType.number, name: '页数', unit: '页'),
-          _PresetField(type: FieldType.duration, name: '阅读时长', unit: '分钟'),
-          _PresetField(type: FieldType.toggle, name: '读完了吗'),
+          PresetField(type: FieldType.text, name: '书名'),
+          PresetField(type: FieldType.number, name: '页数', unit: '页'),
+          PresetField(type: FieldType.duration, name: '阅读时长', unit: '分钟'),
+          PresetField(type: FieldType.toggle, name: '读完了吗'),
         ],
       ),
       PresetTemplate(
@@ -223,7 +230,7 @@ const kPresetCategories = [
         icon: '📝',
         color: '#2563EB',
         fields: [
-          _PresetField(
+          PresetField(
             type: FieldType.taggedValues,
             name: '学科',
             unit: '分钟',
@@ -236,8 +243,8 @@ const kPresetCategories = [
         icon: '🎸',
         color: '#DB2777',
         fields: [
-          _PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
-          _PresetField(type: FieldType.text, name: '练习曲目'),
+          PresetField(type: FieldType.duration, name: '练习时长', unit: '分钟'),
+          PresetField(type: FieldType.text, name: '练习曲目'),
         ],
       ),
     ],
@@ -253,7 +260,7 @@ const kPresetCategories = [
         icon: '💰',
         color: '#F59E0B',
         fields: [
-          _PresetField(
+          PresetField(
             type: FieldType.taggedValues,
             name: '支出分类',
             unit: '¥',
@@ -266,8 +273,8 @@ const kPresetCategories = [
         icon: '🧧',
         color: '#10B981',
         fields: [
-          _PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
-          _PresetField(type: FieldType.category, name: '来源'),
+          PresetField(type: FieldType.cost, name: '金额', unit: '¥'),
+          PresetField(type: FieldType.category, name: '来源'),
         ],
       ),
     ],
@@ -283,7 +290,7 @@ const kPresetCategories = [
         icon: '🌅',
         color: '#F97316',
         fields: [
-          _PresetField(
+          PresetField(
             type: FieldType.singleSelect,
             name: '起床时间段',
             options: ['5:00前', '5:00-6:00', '6:00-7:00', '7:00后'],
@@ -295,8 +302,8 @@ const kPresetCategories = [
         icon: '📵',
         color: '#64748B',
         fields: [
-          _PresetField(type: FieldType.duration, name: '屏幕时间', unit: '小时'),
-          _PresetField(type: FieldType.toggle, name: '达成目标'),
+          PresetField(type: FieldType.duration, name: '屏幕时间', unit: '小时'),
+          PresetField(type: FieldType.toggle, name: '达成目标'),
         ],
       ),
       PresetTemplate(
@@ -304,8 +311,8 @@ const kPresetCategories = [
         icon: '✍️',
         color: '#0891B2',
         fields: [
-          _PresetField(type: FieldType.notes, name: '今日记录'),
-          _PresetField(
+          PresetField(type: FieldType.notes, name: '今日记录'),
+          PresetField(
             type: FieldType.singleSelect,
             name: '今日心情',
             options: ['😊 开心', '😐 平静', '😢 难过', '😤 沮丧', '🤩 兴奋'],

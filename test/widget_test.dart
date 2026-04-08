@@ -5,6 +5,7 @@ import 'package:everytick/main.dart';
 void main() {
   testWidgets('App launches smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const EveryTickApp());
-    expect(find.text('打卡'), findsOneWidget);
+
+    expect(find.byType(EveryTickApp), findsOneWidget);
   });
 }

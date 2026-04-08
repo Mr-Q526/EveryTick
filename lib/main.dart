@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'models/models.dart';
 import 'providers/data_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/new_event_screen.dart';
+import 'screens/edit_event_screen.dart';
 import 'screens/record_screen.dart';
 import 'screens/analytics_screen.dart';
 
@@ -50,6 +52,9 @@ class _EveryTickAppState extends State<EveryTickApp> {
               return MaterialPageRoute(builder: (_) => const HomeScreen());
             case '/event/new':
               return MaterialPageRoute(builder: (_) => const NewEventScreen());
+            case '/event/edit':
+              final event = settings.arguments as EventTemplate;
+              return MaterialPageRoute(builder: (_) => EditEventScreen(event: event));
             case '/record':
               final eventId = settings.arguments as String;
               return MaterialPageRoute(builder: (_) => RecordScreen(eventId: eventId));
