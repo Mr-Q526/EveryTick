@@ -136,4 +136,16 @@ class EventRecord {
     timestamp: json['timestamp'] as int? ?? 0,
     fieldValues: Map<String, dynamic>.from(json['field_values'] as Map? ?? {}),
   );
+
+  EventRecord copyWith({
+    String? id,
+    String? eventId,
+    int? timestamp,
+    Map<String, dynamic>? fieldValues,
+  }) => EventRecord(
+    id: id ?? this.id,
+    eventId: eventId ?? this.eventId,
+    timestamp: timestamp ?? this.timestamp,
+    fieldValues: fieldValues ?? this.fieldValues,
+  );
 }

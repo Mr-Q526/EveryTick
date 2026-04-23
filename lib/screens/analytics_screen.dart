@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
 import '../theme/app_theme.dart';
+import 'record_screen.dart';
 
 enum TimeSpan { oneWeek, oneMonth, threeMonths, oneYear, all }
 
@@ -72,6 +73,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     });
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
+  }
+
+  Future<void> _openRecordEditor(EventTemplate event, EventRecord record) async {
+    final changed = await Navigator.pushNamed(
+      context,
+      '/record',
+      arguments: RecordScreenArgs(eventId: event.id, recordId: record.id),
+    );
+    if (changed == true && mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -1227,87 +1239,131 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                         ? (r.fieldValues[noteField.id] as String? ?? '')
                         : '';
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _surface,
+                    return Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _openRecordEditor(event, r),
                         borderRadius: BorderRadius.circular(_radius),
-                        border: Border.all(color: _line),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: _surfaceAlt,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              timeStr.split(' ')[0],
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: _muted,
-                              ),
-                            ),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _surface,
+                            borderRadius: BorderRadius.circular(_radius),
+                            border: Border.all(color: _line),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  timeStr.split(' ')[1],
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _surfaceAlt,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  timeStr.split(' ')[0],
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w900,
                                     color: _muted,
                                   ),
                                 ),
-                                if (summaries.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    summaries.join(' · '),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w900,
-                                      color: _ink,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          timeStr.split(' ')[1],
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: _muted,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: color.withValues(alpha: 0.08),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '点此修改',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w900,
+                                              color: color,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                                if (noteStr.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    noteStr,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: _muted,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                                    if (summaries.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        summaries.join(' · '),
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w900,
+                                          color: _ink,
+                                        ),
+                                      ),
+                                    ],
+                                    if (noteStr.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        noteStr,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: _muted,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: '编辑记录',
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 44,
+                                  height: 44,
+                                ),
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  Icons.edit_outlined,
+                                  size: 18,
+                                  color: color,
+                                ),
+                                onPressed: () => _openRecordEditor(event, r),
+                              ),
+                              IconButton(
+                                tooltip: '删除记录',
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 44,
+                                  height: 44,
+                                ),
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 18,
+                                  color: _line,
+                                ),
+                                onPressed: () => DataScope.of(
+                                  context,
+                                ).deleteRecord(r.id).then((_) => setState(() {})),
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            tooltip: '删除记录',
-                            constraints: const BoxConstraints.tightFor(
-                              width: 44,
-                              height: 44,
-                            ),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              size: 18,
-                              color: _line,
-                            ),
-                            onPressed: () => DataScope.of(
-                              context,
-                            ).deleteRecord(r.id).then((_) => setState(() {})),
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   }),

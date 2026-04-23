@@ -63,6 +63,20 @@ class DataProvider extends ChangeNotifier {
     await loadData();
   }
 
+  Future<void> updateRecord({
+    required String id,
+    required Map<String, dynamic> fieldValues,
+    int? timestamp,
+  }) async {
+    final existing = _records.firstWhere((r) => r.id == id);
+    final updated = existing.copyWith(
+      timestamp: timestamp ?? existing.timestamp,
+      fieldValues: fieldValues,
+    );
+    await _storage.updateRecord(updated);
+    await loadData();
+  }
+
   Future<void> updateEvent({
     required String id,
     required String name,

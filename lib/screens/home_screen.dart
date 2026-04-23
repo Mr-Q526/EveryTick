@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -6,8 +7,11 @@ import 'package:intl/intl.dart';
 
 import '../models/models.dart';
 import '../providers/data_provider.dart';
+import '../services/haptic_service.dart';
+import '../services/sound_service.dart';
 import '../services/update_service.dart';
 import '../theme/app_theme.dart';
+import 'record_screen.dart';
 
 const _bg = Color(0xFFF7FBFF);
 const _bgTop = Color(0xFFFAFDFF);
@@ -27,6 +31,7 @@ const _success = Color(0xFF34C759);
 const _warning = Color(0xFFFF9500);
 const _rose = Color(0xFFFF3B30);
 const _radius = 8.0;
+const _celebrationDuration = Duration(milliseconds: 1500);
 
 List<BoxShadow> _softShadow([Color color = _primary]) => [
   BoxShadow(
@@ -65,8 +70,14 @@ class _HomeScreenState extends State<HomeScreen> {
   final PageController _pageController = PageController(viewportFraction: 0.84);
   bool _checkedUpdate = false;
   Timer? _updateTimer;
+  Timer? _celebrationTimer;
   int _selectedIndex = 0;
   _HomeMode _mode = _HomeMode.checkIn;
+  String? _celebratingEventId;
+  int _celebrationTick = 0;
+
+  /// Persisted synthesized sound per event (lazy-loaded).
+  final Map<String, CheckInSound> _soundByEvent = {};
 
   @override
   void didChangeDependencies() {
@@ -86,17 +97,87 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _celebrationTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
 
   Future<void> _checkIn(EventTemplate event) async {
     if (event.customFields.isNotEmpty) {
-      Navigator.pushNamed(context, '/record', arguments: event.id);
+      final changed = await showGeneralDialog<bool>(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'close-record-form',
+        barrierColor: Colors.black.withValues(alpha: 0.14),
+        transitionDuration: const Duration(milliseconds: 220),
+        pageBuilder: (dialogContext, _, _) {
+          return RecordScreen(
+            eventId: event.id,
+            modalPresentation: true,
+          );
+        },
+        transitionBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      );
+      if (changed == true && mounted) {
+        await _triggerCelebration(event);
+      }
       return;
     }
 
-    await DataScope.of(context).addRecord(event.id, {});
+    final data = DataScope.of(context);
+    await HapticService.checkInTap();
+    await data.addRecord(event.id, {});
+    if (mounted) {
+      await _triggerCelebration(event);
+    }
+  }
+
+  Future<void> _editRecord(EventTemplate event, EventRecord record) async {
+    await Navigator.pushNamed(
+      context,
+      '/record',
+      arguments: RecordScreenArgs(eventId: event.id, recordId: record.id),
+    );
+  }
+
+  Future<void> _triggerCelebration(EventTemplate event) async {
+    _celebrationTimer?.cancel();
+    await HapticService.celebrateCheckIn();
+    final localAudio = SoundService.getLocalAudio(event.id);
+    if (localAudio != null) {
+      // ignore: unawaited_futures
+      SoundService.playLocalAudio(localAudio.$2);
+    } else {
+      final sound =
+          _soundByEvent[event.id] ??
+          await SoundService.loadEventSound(event.id);
+      _soundByEvent[event.id] = sound;
+      // ignore: unawaited_futures
+      SoundService.play(sound);
+    }
+    setState(() {
+      _celebratingEventId = event.id;
+      _celebrationTick++;
+    });
+    _celebrationTimer = Timer(_celebrationDuration, () {
+      if (!mounted || _celebratingEventId != event.id) {
+        return;
+      }
+      setState(() => _celebratingEventId = null);
+    });
   }
 
   void _selectProject(int index) {
@@ -169,6 +250,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             stats: stats,
                             selectedIndex: _selectedIndex,
                             pageController: _pageController,
+                            celebratingEventId: _celebratingEventId,
+                            celebrationTick: _celebrationTick,
                             onPageChanged: (index) =>
                                 setState(() => _selectedIndex = index),
                             onCheckIn: _checkIn,
@@ -187,6 +270,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               '/analytics',
                               arguments: selected.id,
                             ),
+                            onEditRecord: (record) =>
+                                _editRecord(selected, record),
                           ),
                           _HomeMode.projects => _ProjectsStage(
                             key: const ValueKey('projects'),
@@ -451,6 +536,8 @@ class _CheckInStage extends StatelessWidget {
   final _HomeStats stats;
   final int selectedIndex;
   final PageController pageController;
+  final String? celebratingEventId;
+  final int celebrationTick;
   final ValueChanged<int> onPageChanged;
   final ValueChanged<EventTemplate> onCheckIn;
   final ValueChanged<EventTemplate> onAnalytics;
@@ -460,6 +547,8 @@ class _CheckInStage extends StatelessWidget {
     required this.stats,
     required this.selectedIndex,
     required this.pageController,
+    required this.celebratingEventId,
+    required this.celebrationTick,
     required this.onPageChanged,
     required this.onCheckIn,
     required this.onAnalytics,
@@ -489,6 +578,8 @@ class _CheckInStage extends StatelessWidget {
                   event: event,
                   stats: stats,
                   isSelected: index == selectedIndex,
+                  isCelebrating: celebratingEventId == event.id,
+                  celebrationTick: celebrationTick,
                   onCheckIn: () => onCheckIn(event),
                   onAnalytics: () => onAnalytics(event),
                 ),
@@ -634,6 +725,8 @@ class _BigCheckInCard extends StatelessWidget {
   final EventTemplate event;
   final _HomeStats stats;
   final bool isSelected;
+  final bool isCelebrating;
+  final int celebrationTick;
   final VoidCallback onCheckIn;
   final VoidCallback onAnalytics;
 
@@ -641,6 +734,8 @@ class _BigCheckInCard extends StatelessWidget {
     required this.event,
     required this.stats,
     required this.isSelected,
+    required this.isCelebrating,
+    required this.celebrationTick,
     required this.onCheckIn,
     required this.onAnalytics,
   });
@@ -649,90 +744,143 @@ class _BigCheckInCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = hexToColor(event.color);
     final latest = stats.latestFor(event);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 18, 6, 18),
-      child: _GlassSurface(
-        padding: const EdgeInsets.all(18),
-        accent: color,
-        elevated: isSelected,
-        borderColor: isSelected ? color.withValues(alpha: 0.44) : _line,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withValues(alpha: 0.92),
-            color.withValues(alpha: isSelected ? 0.16 : 0.08),
-            Colors.white.withValues(alpha: 0.76),
-          ],
-          stops: const [0, 0.46, 1],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _StatusTag(
-                  label: stats.todayFor(event) == 0 ? '推荐打卡' : '今日已记录',
-                  color: stats.todayFor(event) == 0 ? _warning : _success,
-                ),
-                const Spacer(),
-                _IconButtonLight(
-                  icon: Icons.bar_chart_rounded,
-                  label: '查看分析',
-                  onTap: onAnalytics,
-                ),
-              ],
-            ),
-            const Spacer(),
-            Center(
-              child: AnimatedScale(
-                scale: isSelected ? 1 : 0.96,
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                child: _EventMark(event: event, color: color, size: 94),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: Text(
-                event.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _ink,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  height: 1.05,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Center(
-              child: Text(
-                latest == null
-                    ? '从第一次开始'
-                    : '上次 ${_formatRelativeTime(latest.timestamp)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const Spacer(),
-            _ColorButton(
-              label: event.customFields.isEmpty ? '立即 +1' : '填写并 +1',
-              color: color,
-              height: 58,
-              onTap: onCheckIn,
-            ),
-          ],
-        ),
+    final card = _GlassSurface(
+      padding: const EdgeInsets.all(18),
+      accent: color,
+      elevated: isSelected,
+      borderColor: isSelected ? color.withValues(alpha: 0.44) : _line,
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.92),
+          color.withValues(alpha: isSelected ? 0.16 : 0.08),
+          Colors.white.withValues(alpha: 0.76),
+        ],
+        stops: const [0, 0.46, 1],
       ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _StatusTag(
+                    label: isCelebrating
+                        ? '已完成记录'
+                        : stats.todayFor(event) == 0
+                        ? '推荐打卡'
+                        : '今日已记录',
+                    color: isCelebrating
+                        ? color
+                        : stats.todayFor(event) == 0
+                        ? _warning
+                        : _success,
+                  ),
+                  const Spacer(),
+                  _IconButtonLight(
+                    icon: Icons.bar_chart_rounded,
+                    label: '查看分析',
+                    onTap: onAnalytics,
+                  ),
+                ],
+              ),
+              const Spacer(),
+              Center(
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    if (isCelebrating)
+                      _MultiRingPulse(
+                        key: ValueKey('halo-${event.id}-$celebrationTick'),
+                        color: color,
+                      ),
+                    AnimatedScale(
+                      scale: isCelebrating ? 1.18 : isSelected ? 1 : 0.96,
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutBack,
+                      child: _EventMark(event: event, color: color, size: 94),
+                    ),
+                    if (isCelebrating)
+                      Positioned(
+                        bottom: -10,
+                        child: _SuccessCapsule(
+                          key: ValueKey('success-${event.id}-$celebrationTick'),
+                          color: color,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: Text(
+                  event.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    height: 1.05,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Center(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  child: Text(
+                    isCelebrating
+                        ? '刚刚完成一次记录'
+                        : latest == null
+                        ? '从第一次开始'
+                        : '上次 ${_formatRelativeTime(latest.timestamp)}',
+                    key: ValueKey('sub-${event.id}-$isCelebrating-${latest?.timestamp}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              _ColorButton(
+                label: isCelebrating
+                    ? '已记录'
+                    : event.customFields.isEmpty
+                    ? '立即 +1'
+                    : '填写并 +1',
+                color: color,
+                height: 58,
+                onTap: onCheckIn,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(6, 18, 6, 18),
+          child: isCelebrating
+              ? _CardFlipMotion(
+                  key: ValueKey('card-${event.id}-$celebrationTick'),
+                  child: card,
+                )
+              : card,
+        ),
+      ],
     );
   }
 }
@@ -754,7 +902,7 @@ class _WeekCapsule extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
-      height: 92,
+      height: 98,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
@@ -857,18 +1005,20 @@ class _DataStage extends StatelessWidget {
   final _HomeStats stats;
   final EventTemplate selected;
   final VoidCallback onAnalytics;
+  final ValueChanged<EventRecord> onEditRecord;
 
   const _DataStage({
     super.key,
     required this.stats,
     required this.selected,
     required this.onAnalytics,
+    required this.onEditRecord,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = hexToColor(selected.color);
-    final recent = stats.recordsFor(selected).take(4).toList();
+    final records = stats.recordsFor(selected);
 
     return ListView(
       physics: const BouncingScrollPhysics(),
@@ -912,22 +1062,24 @@ class _DataStage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _SectionTitle(
-                title: '最近记录',
-                subtitle: '仅显示当前项目',
+              _SectionTitle(
+                title: '打卡记录',
+                subtitle: records.isEmpty
+                    ? '还没有记录'
+                    : '共 ${records.length} 条 · 点击可修改',
                 color: _sky,
               ),
               const SizedBox(height: 8),
-              if (recent.isEmpty)
+              if (records.isEmpty)
                 const _EmptyLine(text: '这个项目还没有记录。')
               else
-                ...recent.map((record) {
-                  return _RecordLine(
+                ...records.map(
+                  (record) => _RecordLine(
                     event: selected,
                     record: record,
-                    onTap: onAnalytics,
-                  );
-                }),
+                    onTap: () => onEditRecord(record),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1106,9 +1258,39 @@ class _RecordLine extends StatelessWidget {
     required this.onTap,
   });
 
+  /// Brief summary of field values (up to 2 fields).
+  static String _fieldSummary(EventTemplate event, EventRecord record) {
+    if (event.customFields.isEmpty || record.fieldValues.isEmpty) return '';
+    final parts = <String>[];
+    for (final field in event.customFields) {
+      final val = record.fieldValues[field.id];
+      if (val == null) continue;
+      final s = switch (field.type) {
+        FieldType.toggle => val == true ? field.name : null,
+        FieldType.number ||
+        FieldType.duration ||
+        FieldType.cost => '$val${field.unit.isNotEmpty ? ' ${field.unit}' : ''}',
+        FieldType.text ||
+        FieldType.notes => val is String && val.isNotEmpty ? val : null,
+        FieldType.singleSelect =>
+          val is String && val.isNotEmpty ? val : null,
+        FieldType.multiSelect =>
+          val is List && val.isNotEmpty ? val.join('、') : null,
+        _ => val.toString().isNotEmpty ? val.toString() : null,
+      };
+      if (s != null) parts.add(s);
+      if (parts.length >= 2) break;
+    }
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final color = hexToColor(event.color);
+    final time = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+    final dateStr = DateFormat('MM/dd').format(time);
+    final timeStr = DateFormat('HH:mm').format(time);
+    final summary = _fieldSummary(event, record);
 
     return Material(
       color: Colors.transparent,
@@ -1119,30 +1301,184 @@ class _RecordLine extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             children: [
-              _EventMark(event: event, color: color, size: 34),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  event.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
+              Column(
+                children: [
+                  Text(
+                    dateStr,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
+                  Text(
+                    timeStr,
+                    style: const TextStyle(
+                      color: _ink,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                _formatRelativeTime(record.timestamp),
-                style: const TextStyle(
-                  color: _muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: summary.isNotEmpty
+                    ? Text(
+                        summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
+                        ),
+                      )
+                    : const Text(
+                        '点击修改',
+                        style: TextStyle(
+                          color: _muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
               ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: _muted, size: 18),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MultiRingPulse extends StatelessWidget {
+  final Color color;
+
+  const _MultiRingPulse({super.key, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 1200),
+      curve: Curves.linear,
+      builder: (context, value, _) {
+        return SizedBox(
+          width: 118,
+          height: 118,
+          child: CustomPaint(
+            painter: _RingPulsePainter(color: color, progress: value),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RingPulsePainter extends CustomPainter {
+  final Color color;
+  final double progress;
+
+  _RingPulsePainter({required this.color, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    for (var i = 0; i < 3; i++) {
+      final delay = i * 0.2;
+      final t = ((progress - delay) / (1 - delay)).clamp(0.0, 1.0);
+      if (t <= 0) continue;
+      final eased = Curves.easeOutCubic.transform(t);
+      final radius = 28 + eased * 52;
+      final opacity = (1 - eased) * (0.35 - i * 0.08);
+      if (opacity <= 0) continue;
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..color = color.withValues(alpha: opacity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.8 - eased * 1.8,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPulsePainter old) =>
+      old.progress != progress;
+}
+
+class _CardFlipMotion extends StatelessWidget {
+  final Widget child;
+
+  const _CardFlipMotion({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    // 3 整圈（6π），easeOut：开始飞快、末尾柔和停下
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: math.pi * 6),
+      duration: _celebrationDuration,
+      curve: Curves.easeOut,
+      builder: (context, angle, builtChild) {
+        final matrix = Matrix4.identity()
+          ..setEntry(3, 2, 0.0012) // 透视深度
+          ..rotateY(angle);
+        return Transform(
+          transform: matrix,
+          alignment: Alignment.center,
+          child: builtChild,
+        );
+      },
+      // RepaintBoundary 先把卡片光栅化为位图，
+      // 避免 BackdropFilter 在变换坐标系下重新计算，
+      // 确保旋转时与静止时视觉完全一致。
+      child: RepaintBoundary(child: child),
+    );
+  }
+}
+
+class _SuccessCapsule extends StatelessWidget {
+  final Color color;
+
+  const _SuccessCapsule({super.key, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 650),
+      curve: Curves.elasticOut,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value.clamp(0.0, 1.15),
+          child: Opacity(opacity: value.clamp(0.0, 1.0), child: child),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(_radius),
+          boxShadow: _ambientShadow(color, strong: true),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_rounded, size: 15, color: Colors.white),
+            SizedBox(width: 5),
+            Text(
+              '+1 已记下',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1869,3 +2205,4 @@ String _dayKey(DateTime day) => '${day.year}-${day.month}-${day.day}';
 bool _isSameDay(DateTime a, DateTime b) {
   return a.year == b.year && a.month == b.month && a.day == b.day;
 }
+

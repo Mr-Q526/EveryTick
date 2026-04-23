@@ -56,7 +56,14 @@ class _EveryTickAppState extends State<EveryTickApp> {
               final event = settings.arguments as EventTemplate;
               return MaterialPageRoute(builder: (_) => EditEventScreen(event: event));
             case '/record':
-              final eventId = settings.arguments as String;
+              final args = settings.arguments;
+              if (args is RecordScreenArgs) {
+                return MaterialPageRoute(
+                  builder: (_) =>
+                      RecordScreen(eventId: args.eventId, recordId: args.recordId),
+                );
+              }
+              final eventId = args as String;
               return MaterialPageRoute(builder: (_) => RecordScreen(eventId: eventId));
             case '/analytics':
               final eventId = settings.arguments as String;

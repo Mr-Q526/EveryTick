@@ -3,13 +3,30 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
+import '../services/haptic_service.dart';
 import '../theme/app_theme.dart';
 import 'event_editor_chrome.dart';
+
+class RecordScreenArgs {
+  final String eventId;
+  final String? recordId;
+
+  const RecordScreenArgs({required this.eventId, this.recordId});
+}
 
 /// Record entry screen — mirrors app/record/[eventId].tsx
 class RecordScreen extends StatefulWidget {
   final String eventId;
-  const RecordScreen({super.key, required this.eventId});
+  final String? recordId;
+  final bool modalPresentation;
+
+  const RecordScreen({
+    super.key,
+    required this.eventId,
+    this.recordId,
+    this.modalPresentation = false,
+  });
+
   @override
   State<RecordScreen> createState() => _RecordScreenState();
 }
@@ -18,17 +35,46 @@ class _RecordScreenState extends State<RecordScreen> {
   final Map<String, dynamic> _formValues = {};
   DateTime _selectedTime = DateTime.now();
   bool _isRetroactive = false; // 补打卡模式
+  bool _didPrefill = false;
+  bool _saving = false;
+  bool _showSuccess = false;
+  String _successLabel = '打卡成功';
 
   EventTemplate? _event;
+  EventRecord? _editingRecord;
+
+  bool get _isEditing => _editingRecord != null;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final data = DataScope.of(context);
-    _event = data.events.firstWhere(
-      (e) => e.id == widget.eventId,
-      orElse: () => _event!,
-    );
+    EventTemplate? foundEvent;
+    for (final event in data.events) {
+      if (event.id == widget.eventId) {
+        foundEvent = event;
+        break;
+      }
+    }
+    _event = foundEvent;
+
+    if (_didPrefill || foundEvent == null) {
+      return;
+    }
+
+    if (widget.recordId != null) {
+      for (final record in data.records) {
+        if (record.id == widget.recordId) {
+          _editingRecord = record;
+          _selectedTime = DateTime.fromMillisecondsSinceEpoch(record.timestamp);
+          _isRetroactive = true;
+          _seedFormValues(foundEvent, record);
+          break;
+        }
+      }
+    }
+
+    _didPrefill = true;
   }
 
   Future<void> _pickDateTime() async {
@@ -57,6 +103,9 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (_saving) {
+      return;
+    }
     final event = _event!;
     final data = DataScope.of(context);
     final parsed = <String, dynamic>{};
@@ -83,22 +132,142 @@ class _RecordScreenState extends State<RecordScreen> {
         parsed[field.id] = val;
       }
     }
+    setState(() => _saving = true);
+    if (_isEditing) {
+      await data.updateRecord(
+        id: _editingRecord!.id,
+        fieldValues: parsed,
+        timestamp: _selectedTime.millisecondsSinceEpoch,
+      );
+      await _playSuccessAndClose('修改已保存');
+      return;
+    }
     await data.addRecord(
       event.id,
       parsed,
       timestamp: _selectedTime.millisecondsSinceEpoch,
     );
-    if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+    await _playSuccessAndClose('打卡成功 +1');
   }
 
   Future<void> _handleSkip() async {
+    if (_saving) {
+      return;
+    }
     final data = DataScope.of(context);
+    setState(() => _saving = true);
     await data.addRecord(
       _event!.id,
       {},
       timestamp: _selectedTime.millisecondsSinceEpoch,
     );
-    if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+    await _playSuccessAndClose('打卡成功 +1');
+  }
+
+  Future<void> _handleDelete() async {
+    final record = _editingRecord;
+    if (record == null) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除这次打卡'),
+        content: const Text('确定删除这条记录吗？删除后不可恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(
+              '删除',
+              style: TextStyle(color: AppColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await DataScope.of(context).deleteRecord(record.id);
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _playSuccessAndClose(String label) async {
+    if (!(widget.modalPresentation && !_isEditing)) {
+      await HapticService.recordSaved();
+    }
+    if (widget.modalPresentation) {
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _showSuccess = true;
+        _successLabel = label;
+      });
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 820));
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
+  }
+
+  void _seedFormValues(EventTemplate event, EventRecord record) {
+    for (final field in event.customFields) {
+      final raw = record.fieldValues[field.id];
+      switch (field.type) {
+        case FieldType.toggle:
+          _formValues[field.id] = raw == true;
+          break;
+        case FieldType.multiSelect:
+          _formValues[field.id] = raw is List
+              ? raw.whereType<String>().toList()
+              : <String>[];
+          break;
+        case FieldType.singleSelect:
+        case FieldType.category:
+        case FieldType.text:
+        case FieldType.notes:
+          _formValues[field.id] = raw is String ? raw : (raw?.toString() ?? '');
+          break;
+        case FieldType.taggedValues:
+          _formValues[field.id] = raw is Map
+              ? Map<String, dynamic>.from(raw)
+              : <String, dynamic>{};
+          break;
+        case FieldType.number:
+        case FieldType.duration:
+        case FieldType.cost:
+          _formValues[field.id] = _editableString(raw);
+          break;
+      }
+    }
+  }
+
+  String _editableString(dynamic raw) {
+    if (raw == null) {
+      return '';
+    }
+    if (raw is int) {
+      return raw.toString();
+    }
+    if (raw is double) {
+      return raw == raw.roundToDouble()
+          ? raw.round().toString()
+          : raw.toString();
+    }
+    return raw.toString();
   }
 
   @override
@@ -117,175 +286,63 @@ class _RecordScreenState extends State<RecordScreen> {
 
     final color = hexToColor(event.color);
     final timeStr = DateFormat('yyyy-MM-dd HH:mm').format(_selectedTime);
+    final content = _RecordScreenScaffold(
+      event: event,
+      color: color,
+      timeStr: timeStr,
+      isEditing: _isEditing,
+      isRetroactive: _isRetroactive,
+      saving: _saving,
+      showSuccess: _showSuccess,
+      successLabel: _successLabel,
+      onClose: () => Navigator.pop(context),
+      onPickDateTime: _pickDateTime,
+      onSave: _handleSave,
+      onSkip: _handleSkip,
+      onDelete: _handleDelete,
+      fields: event.customFields.isEmpty
+          ? [_EmptyFieldHint(color: color)]
+          : event.customFields.map((field) => _buildFieldInput(field, color)).toList(),
+    );
 
-    return Scaffold(
-      backgroundColor: eventEditorBg,
-      body: EventEditorBackground(
+    if (widget.modalPresentation) {
+      return Material(
+        type: MaterialType.transparency,
         child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                child: EventEditorHeader(
-                  title: event.name,
-                  subtitle: '填写本次打卡的详细信息',
-                  mark:
-                      event.icon.isNotEmpty && event.icon.characters.length == 1
-                      ? event.icon
-                      : event.name.characters.first,
-                  color: color,
-                  onClose: () => Navigator.pop(context),
-                ),
-              ),
-              const SizedBox(height: 4),
-
-              // ── Form ──
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                  child: Column(
-                    children: [
-                      // ── 补打卡时间选择 ──
-                      GestureDetector(
-                        onTap: _pickDateTime,
-                        child: EventEditorGlassPanel(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          accent: color,
-                          borderColor: _isRetroactive
-                              ? color.withValues(alpha: 0.3)
-                              : eventEditorLine,
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _isRetroactive
-                                    ? Icons.history
-                                    : Icons.access_time,
-                                size: 18,
-                                color: _isRetroactive
-                                    ? color
-                                    : AppColors.textMuted,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _isRetroactive ? '补打卡' : '打卡时间',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                        color: _isRetroactive
-                                            ? color
-                                            : AppColors.textMuted,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      timeStr,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: _isRetroactive
-                                            ? color
-                                            : AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '点击修改',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: _isRetroactive
-                                      ? color
-                                      : AppColors.textLight,
-                                ),
-                              ),
-                            ],
-                          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: FractionallySizedBox(
+                  heightFactor: 0.88,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(eventEditorRadius),
+                      border: Border.all(color: eventEditorLine),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x18000000),
+                          blurRadius: 30,
+                          offset: Offset(0, 18),
                         ),
-                      ),
-
-                      if (event.customFields.isEmpty)
-                        _EmptyFieldHint(color: color)
-                      else
-                        ...event.customFields.map(
-                          (field) => _buildFieldInput(field, color),
-                        ),
-
-                      // Save button
-                      const SizedBox(height: 16),
-                      EventEditorPrimaryButton(
-                        label: _isRetroactive ? '补打卡 (+1)' : '保存打卡 (+1)',
-                        color: color,
-                        onTap: _handleSave,
-                      ),
-
-                      // Skip button
-                      const SizedBox(height: 12),
-                      EventEditorPressableScale(
-                        child: Material(
-                          color: Colors.white.withValues(alpha: 0.78),
-                          borderRadius: BorderRadius.circular(
-                            eventEditorRadius,
-                          ),
-                          child: InkWell(
-                            onTap: _handleSkip,
-                            borderRadius: BorderRadius.circular(
-                              eventEditorRadius,
-                            ),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(
-                                  eventEditorRadius,
-                                ),
-                                border: Border.all(color: eventEditorLine),
-                              ),
-                              alignment: Alignment.center,
-                              child: const Text(
-                                '跳过字段，直接 +1',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Cancel
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text(
-                          '取消',
-                          style: TextStyle(
-                            color: AppColors.textMuted,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(eventEditorRadius),
+                      child: content,
+                    ),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    }
+
+    return Scaffold(backgroundColor: eventEditorBg, body: content);
   }
 
   Widget _buildFieldInput(FieldDefinition field, Color eventColor) {
@@ -324,6 +381,247 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 }
 
+class _RecordScreenScaffold extends StatelessWidget {
+  final EventTemplate event;
+  final Color color;
+  final String timeStr;
+  final bool isEditing;
+  final bool isRetroactive;
+  final bool saving;
+  final bool showSuccess;
+  final String successLabel;
+  final VoidCallback onClose;
+  final VoidCallback onPickDateTime;
+  final VoidCallback onSave;
+  final VoidCallback onSkip;
+  final VoidCallback onDelete;
+  final List<Widget> fields;
+
+  const _RecordScreenScaffold({
+    required this.event,
+    required this.color,
+    required this.timeStr,
+    required this.isEditing,
+    required this.isRetroactive,
+    required this.saving,
+    required this.showSuccess,
+    required this.successLabel,
+    required this.onClose,
+    required this.onPickDateTime,
+    required this.onSave,
+    required this.onSkip,
+    required this.onDelete,
+    required this.fields,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        EventEditorBackground(
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: EventEditorHeader(
+                    title: event.name,
+                    subtitle: isEditing ? '修改这次打卡的数据' : '填写本次打卡的详细信息',
+                    mark:
+                        event.icon.isNotEmpty && event.icon.characters.length == 1
+                        ? event.icon
+                        : event.name.characters.first,
+                    color: color,
+                    onClose: onClose,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: onPickDateTime,
+                          child: EventEditorGlassPanel(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            accent: color,
+                            borderColor: isRetroactive
+                                ? color.withValues(alpha: 0.3)
+                                : eventEditorLine,
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isRetroactive ? Icons.history : Icons.access_time,
+                                  size: 18,
+                                  color: isRetroactive
+                                      ? color
+                                      : AppColors.textMuted,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        isEditing
+                                            ? '记录时间'
+                                            : isRetroactive
+                                            ? '补打卡'
+                                            : '打卡时间',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: isRetroactive
+                                              ? color
+                                              : AppColors.textMuted,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        timeStr,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: isRetroactive
+                                              ? color
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '点击修改',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isRetroactive
+                                        ? color
+                                        : AppColors.textLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        ...fields,
+                        const SizedBox(height: 16),
+                        EventEditorPrimaryButton(
+                          label: saving
+                              ? (isEditing ? '保存中...' : '提交中...')
+                              : isEditing
+                              ? '保存修改'
+                              : isRetroactive
+                              ? '补打卡 (+1)'
+                              : '保存打卡 (+1)',
+                          color: color,
+                          onTap: onSave,
+                        ),
+                        if (!isEditing) ...[
+                          const SizedBox(height: 12),
+                          EventEditorPressableScale(
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              borderRadius: BorderRadius.circular(eventEditorRadius),
+                              child: InkWell(
+                                onTap: onSkip,
+                                borderRadius: BorderRadius.circular(
+                                  eventEditorRadius,
+                                ),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      eventEditorRadius,
+                                    ),
+                                    border: Border.all(color: eventEditorLine),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    '跳过字段，直接 +1',
+                                    style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 12),
+                          EventEditorPressableScale(
+                            child: Material(
+                              color: Colors.white.withValues(alpha: 0.82),
+                              borderRadius: BorderRadius.circular(eventEditorRadius),
+                              child: InkWell(
+                                onTap: onDelete,
+                                borderRadius: BorderRadius.circular(
+                                  eventEditorRadius,
+                                ),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      eventEditorRadius,
+                                    ),
+                                    border: Border.all(
+                                      color: AppColors.danger.withValues(alpha: 0.24),
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    '删除这次记录',
+                                    style: TextStyle(
+                                      color: AppColors.danger,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: onClose,
+                          child: const Text(
+                            '取消',
+                            style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (showSuccess)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _RecordSuccessOverlay(color: color, label: successLabel),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ── Sub widgets ──
 
 class _EmptyFieldHint extends StatelessWidget {
@@ -355,6 +653,92 @@ class _EmptyFieldHint extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RecordSuccessOverlay extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _RecordSuccessOverlay({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 620),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        final rise = 22 * (1 - value);
+        return Container(
+          color: Colors.white.withValues(alpha: 0.18 * value),
+          alignment: Alignment.center,
+          child: Transform.translate(
+            offset: Offset(0, rise),
+            child: Opacity(
+              opacity: value.clamp(0, 1),
+              child: child,
+            ),
+          ),
+        );
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 122,
+            height: 122,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  color.withValues(alpha: 0.3),
+                  color.withValues(alpha: 0.08),
+                  Colors.transparent,
+                ],
+                stops: const [0.2, 0.62, 1],
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.88),
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withValues(alpha: 0.2)),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.16),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: Icon(Icons.check_rounded, color: color, size: 42),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '这一下很顺',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -784,7 +1168,8 @@ class _TaggedValuesInput extends StatelessWidget {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextField(
+                            child: TextFormField(
+                              initialValue: values[tag]?.toString() ?? '',
                               keyboardType: TextInputType.number,
                               inputFormatters: [
                                 FilteringTextInputFormatter.allow(
@@ -957,7 +1342,8 @@ class _TextFieldInput extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                TextFormField(
+                  initialValue: value,
                   onChanged: onChanged,
                   keyboardType: _isNumeric
                       ? TextInputType.number

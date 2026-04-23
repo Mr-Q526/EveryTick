@@ -62,6 +62,16 @@ class StorageService {
     await prefs.setString(_recordsKey, jsonEncode(records.map((r) => r.toJson()).toList()));
   }
 
+  Future<void> updateRecord(EventRecord updated) async {
+    final records = await getRecords();
+    final idx = records.indexWhere((r) => r.id == updated.id);
+    if (idx != -1) {
+      records[idx] = updated;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_recordsKey, jsonEncode(records.map((r) => r.toJson()).toList()));
+  }
+
   Future<void> deleteRecord(String recordId) async {
     final records = await getRecords();
     records.removeWhere((r) => r.id == recordId);

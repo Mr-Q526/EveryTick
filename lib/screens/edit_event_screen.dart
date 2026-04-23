@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
+import '../services/sound_service.dart';
 import '../theme/app_theme.dart';
 import '../constants/presets.dart';
 import 'event_editor_chrome.dart';
@@ -18,6 +19,7 @@ class _EditEventScreenState extends State<EditEventScreen> {
   late String _selectedIcon;
   late String _selectedColor;
   late List<FieldDefinition> _fields;
+  CheckInSound _sound = CheckInSound.chime;
 
   @override
   void initState() {
@@ -27,6 +29,10 @@ class _EditEventScreenState extends State<EditEventScreen> {
     _selectedColor = widget.event.color;
     // Deep-copy fields so edits don't mutate the original
     _fields = widget.event.customFields.map((f) => f.copyWith()).toList();
+    // Load persisted sound for this event
+    SoundService.loadEventSound(widget.event.id).then((s) {
+      if (mounted) setState(() => _sound = s);
+    });
   }
 
   void _addField(
@@ -269,6 +275,24 @@ class _EditEventScreenState extends State<EditEventScreen> {
                               ),
                             );
                           }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Sound picker
+                      _CardSection(
+                        label: '打卡音效',
+                        child: _SoundPicker(
+                          current: _sound,
+                          eventId: widget.event.id,
+                          onChanged: (sound) async {
+                            setState(() => _sound = sound);
+                            await SoundService.saveEventSound(
+                              widget.event.id,
+                              sound,
+                            );
+                            await SoundService.play(sound);
+                          },
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -794,6 +818,166 @@ class _FieldCardState extends State<_FieldCard> {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ── Sound picker ─────────────────────────────────────────────────────────────
+
+class _SoundPicker extends StatefulWidget {
+  final CheckInSound current;
+  final String eventId;
+  final ValueChanged<CheckInSound> onChanged;
+
+  const _SoundPicker({
+    required this.current,
+    required this.eventId,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SoundPicker> createState() => _SoundPickerState();
+}
+
+class _SoundPickerState extends State<_SoundPicker> {
+  String? _localName;
+
+  static const _icons = {
+    CheckInSound.none: Icons.volume_off_rounded,
+    CheckInSound.chime: Icons.music_note_rounded,
+    CheckInSound.swoosh: Icons.air_rounded,
+    CheckInSound.coin: Icons.paid_rounded,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _localName = SoundService.getLocalAudio(widget.eventId)?.$1;
+  }
+
+  Future<void> _pickLocal() async {
+    final result = await SoundService.pickLocalAudio();
+    if (result != null && mounted) {
+      SoundService.setLocalAudio(widget.eventId, result.$1, result.$2);
+      setState(() => _localName = result.$1);
+      await SoundService.playLocalAudio(result.$2);
+    }
+  }
+
+  void _clearLocal() {
+    SoundService.clearLocalAudio(widget.eventId);
+    setState(() => _localName = null);
+  }
+
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    bool faded = false,
+    bool showClose = false,
+    required VoidCallback onTap,
+  }) {
+    final activeColor =
+        selected ? AppColors.primary : (faded ? AppColors.textMuted : AppColors.textSecondary);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.1)
+              : eventEditorInputFill,
+          borderRadius: BorderRadius.circular(eventEditorRadius),
+          border: Border.all(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.35)
+                : eventEditorLine,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: activeColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: activeColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (showClose) ...[
+              const SizedBox(width: 5),
+              Icon(Icons.close_rounded, size: 12, color: activeColor),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLocal = _localName != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '打卡时播放 · 点击选择并预览',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final sound in CheckInSound.values)
+              _chip(
+                icon: _icons[sound]!,
+                label: sound.label,
+                selected: !hasLocal && sound == widget.current,
+                faded: hasLocal,
+                onTap: () => widget.onChanged(sound),
+              ),
+            if (hasLocal)
+              _chip(
+                icon: Icons.audio_file_rounded,
+                label: _localName!.length > 18
+                    ? '${_localName!.substring(0, 15)}…'
+                    : _localName!,
+                selected: true,
+                showClose: true,
+                onTap: _clearLocal,
+              )
+            else
+              _chip(
+                icon: Icons.folder_open_rounded,
+                label: '本地文件',
+                selected: false,
+                onTap: _pickLocal,
+              ),
+          ],
+        ),
+        if (hasLocal)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '* 本地文件仅当次会话有效，刷新后需重新选择',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted.withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
