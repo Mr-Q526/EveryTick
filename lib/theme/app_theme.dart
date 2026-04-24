@@ -11,7 +11,7 @@ class AppColors {
   static const darkSoft = Color(0xFF1E293B);
 
   // Light surfaces
-  static const bg = Color(0xFFF1F5F9);
+  static const bg = Color(0xFFF7FBFF);
   static const card = Color(0xFFFFFFFF);
   static const cardBorder = Color(0xFFE2E8F0);
 
@@ -39,8 +39,14 @@ class AppColors {
   ];
 
   static const eventColorHexes = [
-    '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B',
-    '#EF4444', '#EC4899', '#06B6D4', '#F97316',
+    '#3B82F6',
+    '#10B981',
+    '#8B5CF6',
+    '#F59E0B',
+    '#EF4444',
+    '#EC4899',
+    '#06B6D4',
+    '#F97316',
   ];
 }
 
@@ -54,17 +60,33 @@ class AppRadius {
 
 class AppShadows {
   static List<BoxShadow> get sm => [
-        BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2)),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 8,
+      offset: const Offset(0, 2),
+    ),
+  ];
   static List<BoxShadow> get md => [
-        BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4)),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.06),
+      blurRadius: 12,
+      offset: const Offset(0, 4),
+    ),
+  ];
   static List<BoxShadow> get lg => [
-        BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 8)),
-      ];
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.08),
+      blurRadius: 20,
+      offset: const Offset(0, 8),
+    ),
+  ];
   static List<BoxShadow> colored(Color color) => [
-        BoxShadow(color: color.withOpacity(0.25), blurRadius: 16, offset: const Offset(0, 6)),
-      ];
+    BoxShadow(
+      color: color.withValues(alpha: 0.25),
+      blurRadius: 16,
+      offset: const Offset(0, 6),
+    ),
+  ];
 }
 
 /// Parse hex color string like '#3B82F6' to Color

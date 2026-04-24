@@ -1,22 +1,39 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../providers/data_provider.dart';
+import '../services/sound_service.dart';
 import '../theme/app_theme.dart';
 import '../constants/presets.dart';
 import 'event_editor_chrome.dart';
 
-/// New Event creation screen — mirrors app/event/new.tsx
-class NewEventScreen extends StatefulWidget {
-  const NewEventScreen({super.key});
+/// Edit Event screen — allows modifying project config after creation
+class EditEventScreen extends StatefulWidget {
+  final EventTemplate event;
+  const EditEventScreen({super.key, required this.event});
   @override
-  State<NewEventScreen> createState() => _NewEventScreenState();
+  State<EditEventScreen> createState() => _EditEventScreenState();
 }
 
-class _NewEventScreenState extends State<NewEventScreen> {
-  String _name = '';
-  String _selectedIcon = '⭐';
-  String _selectedColor = AppColors.eventColorHexes[0];
-  List<FieldDefinition> _fields = [];
+class _EditEventScreenState extends State<EditEventScreen> {
+  late String _name;
+  late String _selectedIcon;
+  late String _selectedColor;
+  late List<FieldDefinition> _fields;
+  CheckInSound _sound = CheckInSound.chime;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = widget.event.name;
+    _selectedIcon = widget.event.icon;
+    _selectedColor = widget.event.color;
+    // Deep-copy fields so edits don't mutate the original
+    _fields = widget.event.customFields.map((f) => f.copyWith()).toList();
+    // Load persisted sound for this event
+    SoundService.loadEventSound(widget.event.id).then((s) {
+      if (mounted) setState(() => _sound = s);
+    });
+  }
 
   void _addField(
     FieldType type,
@@ -58,39 +75,6 @@ class _NewEventScreenState extends State<NewEventScreen> {
     setState(() => _fields.removeWhere((f) => f.id == id));
   }
 
-  void _applyPreset(PresetTemplate preset) {
-    // Strip emoji prefix + variation selectors from preset name for cleaner display
-    final cleanName = preset.name
-        .replaceAll(
-          RegExp(
-            r'^[\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier}\p{Emoji_Component}\uFE0F\u200D\s]+',
-            unicode: true,
-          ),
-          '',
-        )
-        .trim();
-    setState(() {
-      _name = cleanName;
-      _selectedIcon = preset.icon;
-      _selectedColor = preset.color;
-      _fields = preset.toFieldDefinitions();
-    });
-  }
-
-  void _showPresetSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _PresetSheet(
-        onSelect: (preset) {
-          Navigator.pop(context);
-          _applyPreset(preset);
-        },
-      ),
-    );
-  }
-
   Future<void> _handleSave() async {
     if (_name.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -102,13 +86,14 @@ class _NewEventScreenState extends State<NewEventScreen> {
       return;
     }
     final data = DataScope.of(context);
-    await data.addEvent(
+    await data.updateEvent(
+      id: widget.event.id,
       name: _name,
       icon: _selectedIcon,
       color: _selectedColor,
       customFields: _fields,
     );
-    if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (_) => false);
+    if (mounted) Navigator.pop(context, true); // return true = changed
   }
 
   @override
@@ -123,8 +108,8 @@ class _NewEventScreenState extends State<NewEventScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                 child: EventEditorHeader(
-                  title: '新建项目',
-                  subtitle: '自定义你的打卡模板',
+                  title: '编辑项目',
+                  subtitle: '修改打卡项目的配置',
                   mark: _selectedIcon,
                   color: hexToColor(_selectedColor),
                   onClose: () => Navigator.pop(context),
@@ -140,90 +125,6 @@ class _NewEventScreenState extends State<NewEventScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Presets button
-                      GestureDetector(
-                        onTap: () => _showPresetSheet(context),
-                        child: EventEditorGlassPanel(
-                          accent: AppColors.primary,
-                          padding: const EdgeInsets.all(18),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(
-                                    eventEditorRadius,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.dashboard_customize,
-                                  color: AppColors.primary,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '从模板创建',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    SizedBox(height: 3),
-                                    Text(
-                                      '18 个预设打卡项目，覆盖运动 · 生活 · 学习 · 财务 · 习惯',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: AppColors.textLight,
-                                size: 22,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Divider
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Divider(color: eventEditorLine),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Text(
-                              '或者自定义',
-                              style: TextStyle(
-                                color: AppColors.textMuted,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const Expanded(
-                            child: Divider(color: eventEditorLine),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-
                       // Name input
                       _CardSection(
                         label: '项目名称',
@@ -376,6 +277,24 @@ class _NewEventScreenState extends State<NewEventScreen> {
                           }).toList(),
                         ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // Sound picker
+                      _CardSection(
+                        label: '打卡音效',
+                        child: _SoundPicker(
+                          current: _sound,
+                          eventId: widget.event.id,
+                          onChanged: (sound) async {
+                            setState(() => _sound = sound);
+                            await SoundService.saveEventSound(
+                              widget.event.id,
+                              sound,
+                            );
+                            await SoundService.play(sound);
+                          },
+                        ),
+                      ),
                       const SizedBox(height: 24),
 
                       // Custom fields header
@@ -505,7 +424,7 @@ class _NewEventScreenState extends State<NewEventScreen> {
 
                       // Save button
                       EventEditorPrimaryButton(
-                        label: '保存项目',
+                        label: '保存修改',
                         color: hexToColor(_selectedColor),
                         onTap: _handleSave,
                       ),
@@ -521,179 +440,7 @@ class _NewEventScreenState extends State<NewEventScreen> {
   }
 }
 
-// ── Sub widgets ──
-
-/// Bottom sheet with categorized preset templates
-class _PresetSheet extends StatelessWidget {
-  final ValueChanged<PresetTemplate> onSelect;
-  const _PresetSheet({required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      maxChildSize: 0.92,
-      minChildSize: 0.4,
-      builder: (_, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: eventEditorInputFill,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(eventEditorRadius),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Handle bar
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: eventEditorLine,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '选择打卡模板',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${kPresetCategories.length} 个分类 · ${kPresets.length} 个模板',
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-                itemCount: kPresetCategories.length,
-                itemBuilder: (_, i) {
-                  final cat = kPresetCategories[i];
-                  return _PresetCategorySection(
-                    category: cat,
-                    onSelect: onSelect,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PresetCategorySection extends StatelessWidget {
-  final PresetCategory category;
-  final ValueChanged<PresetTemplate> onSelect;
-  const _PresetCategorySection({
-    required this.category,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-          child: Row(
-            children: [
-              Text(category.icon, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
-              Text(
-                category.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${category.presets.length}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: category.presets.map((p) {
-            final color = hexToColor(p.color);
-            final parts = p.name.split(' ');
-            final emoji = parts[0];
-            final label = parts.sublist(1).join(' ');
-            final w = (MediaQuery.of(context).size.width - 32 - 10) / 2;
-            return EventEditorPressableScale(
-              child: GestureDetector(
-                onTap: () => onSelect(p),
-                child: EventEditorGlassPanel(
-                  width: w,
-                  accent: color,
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      Container(height: 3, color: color),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Text(emoji, style: const TextStyle(fontSize: 20)),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${p.fields.length} 个字段',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: AppColors.textMuted,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 20),
-      ],
-    );
-  }
-}
+// ── Sub widgets — copied from NewEventScreen to keep each screen self-contained ──
 
 class _CardSection extends StatelessWidget {
   final String label;
@@ -1071,6 +818,166 @@ class _FieldCardState extends State<_FieldCard> {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ── Sound picker ─────────────────────────────────────────────────────────────
+
+class _SoundPicker extends StatefulWidget {
+  final CheckInSound current;
+  final String eventId;
+  final ValueChanged<CheckInSound> onChanged;
+
+  const _SoundPicker({
+    required this.current,
+    required this.eventId,
+    required this.onChanged,
+  });
+
+  @override
+  State<_SoundPicker> createState() => _SoundPickerState();
+}
+
+class _SoundPickerState extends State<_SoundPicker> {
+  String? _localName;
+
+  static const _icons = {
+    CheckInSound.none: Icons.volume_off_rounded,
+    CheckInSound.chime: Icons.music_note_rounded,
+    CheckInSound.swoosh: Icons.air_rounded,
+    CheckInSound.coin: Icons.paid_rounded,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _localName = SoundService.getLocalAudio(widget.eventId)?.$1;
+  }
+
+  Future<void> _pickLocal() async {
+    final result = await SoundService.pickLocalAudio();
+    if (result != null && mounted) {
+      SoundService.setLocalAudio(widget.eventId, result.$1, result.$2);
+      setState(() => _localName = result.$1);
+      await SoundService.playLocalAudio(result.$2);
+    }
+  }
+
+  void _clearLocal() {
+    SoundService.clearLocalAudio(widget.eventId);
+    setState(() => _localName = null);
+  }
+
+  Widget _chip({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    bool faded = false,
+    bool showClose = false,
+    required VoidCallback onTap,
+  }) {
+    final activeColor =
+        selected ? AppColors.primary : (faded ? AppColors.textMuted : AppColors.textSecondary);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primary.withValues(alpha: 0.1)
+              : eventEditorInputFill,
+          borderRadius: BorderRadius.circular(eventEditorRadius),
+          border: Border.all(
+            color: selected
+                ? AppColors.primary.withValues(alpha: 0.35)
+                : eventEditorLine,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: activeColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: activeColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (showClose) ...[
+              const SizedBox(width: 5),
+              Icon(Icons.close_rounded, size: 12, color: activeColor),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLocal = _localName != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '打卡时播放 · 点击选择并预览',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textMuted,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final sound in CheckInSound.values)
+              _chip(
+                icon: _icons[sound]!,
+                label: sound.label,
+                selected: !hasLocal && sound == widget.current,
+                faded: hasLocal,
+                onTap: () => widget.onChanged(sound),
+              ),
+            if (hasLocal)
+              _chip(
+                icon: Icons.audio_file_rounded,
+                label: _localName!.length > 18
+                    ? '${_localName!.substring(0, 15)}…'
+                    : _localName!,
+                selected: true,
+                showClose: true,
+                onTap: _clearLocal,
+              )
+            else
+              _chip(
+                icon: Icons.folder_open_rounded,
+                label: '本地文件',
+                selected: false,
+                onTap: _pickLocal,
+              ),
+          ],
+        ),
+        if (hasLocal)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '* 本地文件仅当次会话有效，刷新后需重新选择',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted.withValues(alpha: 0.7),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
