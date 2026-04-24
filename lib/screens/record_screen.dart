@@ -1229,7 +1229,7 @@ class _TaggedValuesInput extends StatelessWidget {
 }
 
 /// Text/Number/Duration/Cost/Category/Notes field input
-class _TextFieldInput extends StatelessWidget {
+class _TextFieldInput extends StatefulWidget {
   final FieldDefinition field;
   final String value;
   final ValueChanged<String> onChanged;
@@ -1239,8 +1239,31 @@ class _TextFieldInput extends StatelessWidget {
     required this.onChanged,
   });
 
+  @override
+  State<_TextFieldInput> createState() => _TextFieldInputState();
+}
+
+class _TextFieldInputState extends State<_TextFieldInput> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value);
+    _ctrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isNotes => widget.field.type == FieldType.notes;
+  bool get _isText => widget.field.type == FieldType.text;
+
   IconData get _icon {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.number:
         return Icons.tag;
       case FieldType.text:
@@ -1252,14 +1275,14 @@ class _TextFieldInput extends StatelessWidget {
       case FieldType.cost:
         return Icons.attach_money;
       case FieldType.notes:
-        return Icons.notes;
+        return Icons.edit_note;
       default:
         return Icons.short_text;
     }
   }
 
   Color get _color {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.number:
         return AppColors.textSecondary;
       case FieldType.text:
@@ -1278,11 +1301,11 @@ class _TextFieldInput extends StatelessWidget {
   }
 
   String get _hint {
-    switch (field.type) {
+    switch (widget.field.type) {
       case FieldType.number:
         return '普通记录 — 请输入数值';
       case FieldType.text:
-        return '单行文本 — 请输入一段话';
+        return '文本 — 请输入一段话';
       case FieldType.duration:
         return '时长记录 — 请输入长短';
       case FieldType.category:
@@ -1290,7 +1313,7 @@ class _TextFieldInput extends StatelessWidget {
       case FieldType.cost:
         return '金额记录 — 请输入开支';
       case FieldType.notes:
-        return '长篇笔记 — (纯文本记录流)';
+        return '日记 / 长篇笔记';
       default:
         return '请输入...';
     }
@@ -1300,10 +1323,18 @@ class _TextFieldInput extends StatelessWidget {
     FieldType.number,
     FieldType.duration,
     FieldType.cost,
-  ].contains(field.type);
+  ].contains(widget.field.type);
+
+  String get _hintBody {
+    if (_isNotes) return '今天发生了什么？写下你的想法…';
+    if (_isText) return '请输入…';
+    return '0';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final charCount = _ctrl.text.length;
+
     return EventEditorGlassPanel(
       margin: const EdgeInsets.only(bottom: 16),
       accent: _color,
@@ -1313,28 +1344,30 @@ class _TextFieldInput extends StatelessWidget {
         children: [
           Container(height: 3, color: _color),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${field.name} ${field.unit.isNotEmpty ? "(${field.unit})" : ""}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
+                // ── Header ─────────────────────────────────────────
                 Row(
                   children: [
-                    Icon(_icon, size: 12, color: _color),
-                    const SizedBox(width: 5),
+                    Icon(_icon, size: 13, color: _color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${widget.field.name}${widget.field.unit.isNotEmpty ? "  (${widget.field.unit})" : ""}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
                     Text(
                       _hint,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         color: AppColors.textMuted,
                         fontWeight: FontWeight.w500,
                       ),
@@ -1342,37 +1375,73 @@ class _TextFieldInput extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  initialValue: value,
-                  onChanged: onChanged,
+
+                // ── Input ──────────────────────────────────────────
+                TextField(
+                  controller: _ctrl,
+                  onChanged: widget.onChanged,
                   keyboardType: _isNumeric
                       ? TextInputType.number
-                      : TextInputType.text,
+                      : TextInputType.multiline,
+                  textInputAction: (_isNotes || _isText)
+                      ? TextInputAction.newline
+                      : TextInputAction.done,
                   inputFormatters: _isNumeric
                       ? [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))]
                       : null,
-                  maxLines: field.type == FieldType.notes ? null : 1,
-                  minLines: field.type == FieldType.notes ? 3 : 1,
+                  maxLines: _isNotes ? null : (_isText ? 4 : 1),
+                  minLines: _isNotes ? 8 : 1,
+                  cursorColor: _color,
                   decoration: InputDecoration(
-                    hintText: _isNumeric ? '0' : '请输入...',
-                    hintStyle: const TextStyle(color: AppColors.textLight),
+                    hintText: _hintBody,
+                    hintStyle: TextStyle(
+                      color: AppColors.textLight,
+                      fontSize: _isNotes ? 16 : 18,
+                      fontWeight: FontWeight.w400,
+                      height: _isNotes ? 1.7 : 1.4,
+                    ),
                     filled: true,
                     fillColor: eventEditorInputFill,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(eventEditorRadius),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(eventEditorRadius),
+                      borderSide: BorderSide(color: _color.withValues(alpha: 0.4), width: 1.5),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
                       horizontal: 18,
-                      vertical: 16,
+                      vertical: _isNotes ? 18 : 16,
                     ),
                   ),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                  style: TextStyle(
+                    fontSize: _isNotes ? 16 : 18,
+                    fontWeight: _isNotes ? FontWeight.w400 : FontWeight.w700,
                     color: AppColors.textPrimary,
+                    height: _isNotes ? 1.75 : 1.4,
                   ),
                 ),
+
+                // ── Word count (notes only) ────────────────────────
+                if (_isNotes) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        '$charCount 字',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: charCount > 0
+                              ? _color.withValues(alpha: 0.8)
+                              : AppColors.textLight,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
