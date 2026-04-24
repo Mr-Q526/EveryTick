@@ -171,7 +171,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _celebratingEventId = event.id;
       _celebrationTick++;
+      _selectedIndex = 0; // pinned card is always at index 0
     });
+    _pageController.jumpToPage(0);
     _celebrationTimer = Timer(_celebrationDuration, () {
       if (!mounted || _celebratingEventId != event.id) {
         return;
@@ -203,7 +205,15 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final stats = _HomeStats.from(data.events, data.records);
+    final rawStats = _HomeStats.from(data.events, data.records);
+
+    // During celebration, pin the celebrating card to the front of the deck
+    // so the flip animation is always visible regardless of sort order.
+    final stats = (_celebratingEventId != null &&
+            rawStats.deck.any((e) => e.id == _celebratingEventId))
+        ? rawStats.copyWithPinnedDeck(_celebratingEventId!)
+        : rawStats;
+
     if (_selectedIndex >= stats.deck.length) {
       _selectedIndex = stats.deck.isEmpty ? 0 : stats.deck.length - 1;
     }
@@ -371,6 +381,23 @@ class _HomeStats {
       cursor = cursor.subtract(const Duration(days: 1));
     }
     return streak;
+  }
+
+  _HomeStats copyWithPinnedDeck(String pinnedId) {
+    final pinned = deck.firstWhere((e) => e.id == pinnedId);
+    final rest = deck.where((e) => e.id != pinnedId).toList();
+    return _HomeStats(
+      deck: [pinned, ...rest],
+      eventById: eventById,
+      recordsByEvent: recordsByEvent,
+      totalByEvent: totalByEvent,
+      todayByEvent: todayByEvent,
+      latestByEvent: latestByEvent,
+      recentRecords: recentRecords,
+      totalRecords: totalRecords,
+      todayCount: todayCount,
+      activeEventCountToday: activeEventCountToday,
+    );
   }
 
   List<_DayCount> weekFor(EventTemplate event) {
